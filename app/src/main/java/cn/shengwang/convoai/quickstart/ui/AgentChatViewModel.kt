@@ -1,5 +1,6 @@
 package cn.shengwang.convoai.quickstart.ui
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import androidx.core.content.edit
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -56,8 +58,28 @@ class AgentChatViewModel : ViewModel() {
 
     companion object {
         private const val TAG = "ConversationViewModel"
-        val userId = (100000..999999).random()
+        private const val USER_PREFS_NAME = "agent_chat_prefs"
+        private const val KEY_LOCAL_USER_ID = "local_user_id"
+        private const val INVALID_UID = -1
+        val userId = getOrCreateLocalUserId()
         val agentUid: Int = generateUniqueUid(userId)
+
+        private fun getOrCreateLocalUserId(): Int {
+            val sharedPreferences = AgentApp.instance().getSharedPreferences(
+                USER_PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
+            val cachedUserId = sharedPreferences.getInt(KEY_LOCAL_USER_ID, INVALID_UID)
+            if (cachedUserId != INVALID_UID) {
+                return cachedUserId
+            }
+
+            val newUserId = generateRandomUid()
+            sharedPreferences.edit {
+                putInt(KEY_LOCAL_USER_ID, newUserId)
+            }
+            return newUserId
+        }
 
         /**
          * Generate a unique UID that doesn't conflict with the given uid
@@ -65,16 +87,20 @@ class AgentChatViewModel : ViewModel() {
         private fun generateUniqueUid(excludeUid: Int): Int {
             var uid: Int
             do {
-                uid = (100000..999999).random()
+                uid = generateRandomUid()
             } while (uid == excludeUid)
             return uid
+        }
+
+        private fun generateRandomUid(): Int {
+            return (100000..999999).random()
         }
 
         /**
          * Generate a random channel name
          */
         fun generateRandomChannelName(): String {
-            return "channel_kotlin_${(100000..999999).random()}"
+            return "channel_kotlin_${generateRandomUid()}"
         }
     }
 
