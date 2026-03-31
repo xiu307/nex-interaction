@@ -261,3 +261,9 @@ To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`. St
 | AGENTS.md | AI Agent development guidelines and project constraints |
 | ARCHITECTURE.md | Technical architecture details (data flows, threading, lifecycle) |
 | README.md | Quick start and usage guide (Chinese) |
+| docs/WORKFLOW_TEMPLATES.md | Workflow entry, routing, and acceptance templates for feat/fix/refactor/chore/docs tasks |
+| docs/PROJECT_STATE_TEMPLATE.md | Template for the local `PROJECT_STATE.md` memory file maintained during workflow execution |
+| docs/REVIEW_TEMPLATES.md | Review criteria and phase/status output conventions for code and docs tasks |
+| docs/PR_CHECKLIST.md | PR review checklist covering app code, workflow assets, docs, and skills |
+| .agents/skills/ | Local workflow skills used to manage planning, execution, review, and state handoff |
+| PROJECT_STATE.md | Local task state file created and updated by `ac-memory` during active workflow sessions |
