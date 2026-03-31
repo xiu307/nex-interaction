@@ -83,6 +83,11 @@ class AgentChatViewModel : ViewModel() {
         Error
     }
 
+    enum class CameraFacing {
+        FRONT,
+        BACK
+    }
+
     // UI State - shared between AgentHomeFragment and VoiceAssistantFragment
     data class ConversationUiState constructor(
         val isMuted: Boolean = false,
@@ -92,6 +97,9 @@ class AgentChatViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
+
+    private val _cameraFacing = MutableStateFlow(CameraFacing.FRONT)
+    val cameraFacing: StateFlow<CameraFacing> = _cameraFacing.asStateFlow()
 
     // Transcript list - separate from UI state
     private val _transcriptList = MutableStateFlow<List<Transcript>>(emptyList())
@@ -127,6 +135,7 @@ class AgentChatViewModel : ViewModel() {
     private var rtmClient: RtmClient? = null
     private var isRtmLogin = false
     private var isLoggingIn = false
+    private var isLocalPreviewRunning = false
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             viewModelScope.launch {
@@ -435,7 +444,7 @@ class AgentChatViewModel : ViewModel() {
         val channelOptions = ChannelMediaOptions().apply {
             clientRoleType = CLIENT_ROLE_BROADCASTER
             publishMicrophoneTrack = true
-            publishCameraTrack = false
+            publishCameraTrack = true
             autoSubscribeAudio = true
             autoSubscribeVideo = true
         }
@@ -463,6 +472,41 @@ class AgentChatViewModel : ViewModel() {
     private fun muteLocalAudio(mute: Boolean) {
         Log.d(TAG, "muteLocalAudio $mute")
         rtcEngine?.adjustRecordingSignalVolume(if (mute) 0 else 100)
+    }
+
+    fun getRtcEngine(): RtcEngineEx? = rtcEngine
+
+    fun startLocalPreview() {
+        if (isLocalPreviewRunning) {
+            return
+        }
+        rtcEngine?.enableLocalVideo(true)
+        rtcEngine?.startPreview()
+        isLocalPreviewRunning = true
+        addStatusLog("Local video preview started")
+    }
+
+    fun stopLocalPreview() {
+        if (!isLocalPreviewRunning) {
+            return
+        }
+        rtcEngine?.stopPreview()
+        rtcEngine?.enableLocalVideo(false)
+        isLocalPreviewRunning = false
+        _cameraFacing.value = CameraFacing.FRONT
+        addStatusLog("Local video preview stopped")
+    }
+
+    fun switchCamera() {
+        val result = rtcEngine?.switchCamera() ?: return
+        if (result == ERR_OK) {
+            _cameraFacing.value =
+                if (_cameraFacing.value == CameraFacing.FRONT) CameraFacing.BACK else CameraFacing.FRONT
+            addStatusLog("Switch camera successfully")
+        } else {
+            addStatusLog("Switch camera failed ret: $result")
+            Log.e(TAG, "Switch camera failed, ret: $result")
+        }
     }
 
     /**
@@ -704,6 +748,7 @@ class AgentChatViewModel : ViewModel() {
                 }
 
                 leaveRtcChannel()
+                stopLocalPreview()
                 rtcJoined = false
                 authToken = null
                 _uiState.value = _uiState.value.copy(
@@ -720,6 +765,7 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        stopLocalPreview()
         leaveRtcChannel()
         logoutRtm()
 

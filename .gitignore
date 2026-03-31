@@ -15,6 +15,4 @@ env.properties
 # Python virtual environment
 server/venv/
 /.kotlin/
-.agents/
-.kiro
-.doc
+PROJECT_STATE.md

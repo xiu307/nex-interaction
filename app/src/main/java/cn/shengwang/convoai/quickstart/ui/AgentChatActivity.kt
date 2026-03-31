@@ -5,6 +5,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
@@ -25,6 +26,7 @@ import io.agora.convoai.convoaiApi.TranscriptType
 import cn.shengwang.convoai.quickstart.databinding.ActivityAgentChatBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptUserBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptAgentBinding
+import io.agora.rtc2.video.VideoCanvas
 import kotlinx.coroutines.launch
 
 /**
@@ -36,6 +38,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private lateinit var viewModel: AgentChatViewModel
     private lateinit var mPermissionHelp: PermissionHelp
     private val transcriptAdapter: TranscriptAdapter = TranscriptAdapter()
+    private var localPreviewView: TextureView? = null
 
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
@@ -58,6 +61,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
         // Observe debug log changes
         observeDebugLogs()
+
+        // Observe current camera facing state
+        observeCameraFacing()
     }
 
     override fun initView() {
@@ -72,14 +78,15 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 // Generate random channel name each time joining channel
                 val channelName = AgentChatViewModel.generateRandomChannelName()
 
-                // Check microphone permission before joining channel
-                checkMicrophonePermission { granted ->
+                // Check camera and microphone permissions before joining channel
+                checkMediaPermissions { granted ->
                     if (granted) {
+                        attachLocalPreview()
                         viewModel.joinChannelAndLogin(channelName)
                     } else {
                         Toast.makeText(
                             this@AgentChatActivity,
-                            "Microphone permission is required to join channel",
+                            "Camera and microphone permissions are required to join channel",
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -91,6 +98,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 viewModel.toggleMute()
             }
 
+            // Switch camera button click listener
+            btnSwitchCamera.setOnClickListener {
+                viewModel.switchCamera()
+            }
+
             // Stop button click listener
             btnStop.setOnClickListener {
                 viewModel.hangup()
@@ -98,47 +110,112 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
     }
 
-    private fun checkMicrophonePermission(granted: (Boolean) -> Unit) {
-        if (mPermissionHelp.hasMicPerm()) {
+    private fun checkMediaPermissions(granted: (Boolean) -> Unit) {
+        if (mPermissionHelp.hasCameraPerm() && mPermissionHelp.hasMicPerm()) {
             granted.invoke(true)
-        } else {
-            mPermissionHelp.checkMicPerm(
-                granted = { granted.invoke(true) },
-                unGranted = {
-                    showPermissionDialog(
-                        "Permission Required",
-                        "Microphone permission is required for voice chat. Please grant the permission to continue.",
-                        onResult = {
-                            if (it) {
-                                mPermissionHelp.launchAppSettingForMic(
-                                    granted = { granted.invoke(true) },
-                                    unGranted = { granted.invoke(false) }
-                                )
-                            } else {
-                                granted.invoke(false)
-                            }
-                        }
-                    )
-                }
-            )
+            return
+        }
+
+        mPermissionHelp.checkCameraAndMicPerms(
+            granted = {
+                granted.invoke(true)
+            },
+            unGranted = {
+                handleMediaPermissionDenied(granted)
+            }
+        )
+    }
+
+    private fun handleMediaPermissionDenied(granted: (Boolean) -> Unit) {
+        when {
+            !mPermissionHelp.hasCameraPerm() -> {
+                showPermissionDialog(
+                    "Permission Required",
+                    "Camera permission is required to publish local video and show the preview window.",
+                    launchSettings = {
+                        mPermissionHelp.launchAppSettingForCamera(
+                            granted = { checkMediaPermissions(granted) },
+                            unGranted = { granted(false) }
+                        )
+                    },
+                    onDeclined = {
+                        granted(false)
+                    }
+                )
+            }
+
+            !mPermissionHelp.hasMicPerm() -> {
+                showPermissionDialog(
+                    "Permission Required",
+                    "Microphone permission is required for voice chat. Please grant the permission to continue.",
+                    launchSettings = {
+                        mPermissionHelp.launchAppSettingForMic(
+                            granted = { checkMediaPermissions(granted) },
+                            unGranted = { granted(false) }
+                        )
+                    },
+                    onDeclined = {
+                        granted(false)
+                    }
+                )
+            }
+
+            else -> {
+                granted(false)
+            }
         }
     }
 
-    private fun showPermissionDialog(title: String, content: String, onResult: (Boolean) -> Unit) {
+    private fun showPermissionDialog(
+        title: String,
+        content: String,
+        launchSettings: () -> Unit,
+        onDeclined: () -> Unit
+    ) {
         if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return
 
         CommonDialog.Builder()
             .setTitle(title)
             .setContent(content)
-            .setPositiveButton("Retry") {
-                onResult.invoke(true)
+            .setPositiveButton("Settings") {
+                launchSettings.invoke()
             }
             .setNegativeButton("Exit") {
-                onResult.invoke(false)
+                onDeclined.invoke()
             }
             .setCancelable(false)
             .build()
             .show(supportFragmentManager, "permission_dialog")
+    }
+
+    private fun attachLocalPreview() {
+        val binding = mBinding ?: return
+        val rtcEngine = viewModel.getRtcEngine() ?: return
+
+        if (localPreviewView == null) {
+            val textureView = TextureView(this)
+            binding.flLocalPreview.removeAllViews()
+            binding.flLocalPreview.addView(
+                textureView,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            rtcEngine.setupLocalVideo(VideoCanvas(textureView, VideoCanvas.RENDER_MODE_HIDDEN, 0))
+            localPreviewView = textureView
+        }
+
+        binding.cardLocalPreview.visibility = View.VISIBLE
+        viewModel.startLocalPreview()
+    }
+
+    private fun detachLocalPreview() {
+        mBinding?.apply {
+            flLocalPreview.removeAllViews()
+            cardLocalPreview.visibility = View.GONE
+        }
+        localPreviewView = null
     }
 
     /**
@@ -196,6 +273,20 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
                     llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
 
+                    if (localPreviewView != null) {
+                        cardLocalPreview.visibility =
+                            if (isConnected || isConnecting) View.VISIBLE else View.GONE
+                    }
+
+                    val shouldTearDownPreview =
+                        localPreviewView != null &&
+                                (state.connectionState == AgentChatViewModel.ConnectionState.Idle ||
+                                        state.connectionState == AgentChatViewModel.ConnectionState.Error)
+                    if (shouldTearDownPreview) {
+                        viewModel.stopLocalPreview()
+                        detachLocalPreview()
+                    }
+
                     // Update button style based on connection state
                     val isError = state.connectionState == AgentChatViewModel.ConnectionState.Error
                     when {
@@ -203,14 +294,21 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             btnStart.text = "Connecting..."
                             btnStart.isEnabled = false
                             btnStart.setBackgroundResource(R.drawable.bg_start_button_disabled)
-                            btnStart.setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.btn_disabled_text))
+                            btnStart.setTextColor(
+                                ContextCompat.getColor(
+                                    this@AgentChatActivity,
+                                    R.color.btn_disabled_text
+                                )
+                            )
                         }
+
                         isError -> {
                             btnStart.text = "Retry"
                             btnStart.isEnabled = true
                             btnStart.setBackgroundResource(R.drawable.bg_start_button_error)
                             btnStart.setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
                         }
+
                         else -> {
                             btnStart.text = "Start Agent"
                             btnStart.isEnabled = true
@@ -276,6 +374,26 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
     }
 
+    private fun observeCameraFacing() {
+        lifecycleScope.launch {
+            viewModel.cameraFacing.collect { cameraFacing ->
+                mBinding?.btnSwitchCamera?.apply {
+                    when (cameraFacing) {
+                        AgentChatViewModel.CameraFacing.FRONT -> {
+                            setImageResource(R.drawable.ic_camera_front)
+                            contentDescription = context.getString(R.string.camera_front_desc)
+                        }
+
+                        AgentChatViewModel.CameraFacing.BACK -> {
+                            setImageResource(R.drawable.ic_camera_rear)
+                            contentDescription = context.getString(R.string.camera_back_desc)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun observeDebugLogs() {
         lifecycleScope.launch {
             viewModel.debugLogList.collect { logList ->
@@ -294,11 +412,14 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                         // Determine log level color based on content keywords
                         val colorRes = when {
                             log.contains("failed", ignoreCase = true) ||
-                            log.contains("error", ignoreCase = true) -> R.color.error_red_light
+                                    log.contains("error", ignoreCase = true) -> R.color.error_red_light
+
                             log.contains("successfully", ignoreCase = true) ||
-                            log.contains("success", ignoreCase = true) -> R.color.success_green_light
+                                    log.contains("success", ignoreCase = true) -> R.color.success_green_light
+
                             log.contains("connecting", ignoreCase = true) ||
-                            log.contains("starting", ignoreCase = true) -> R.color.warning_amber_light
+                                    log.contains("starting", ignoreCase = true) -> R.color.warning_amber_light
+
                             else -> R.color.text_secondary
                         }
                         spannable.setSpan(
@@ -343,6 +464,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 isScrollBottom = true
             }
         }
+    }
+
+    override fun onDestroy() {
+        viewModel.stopLocalPreview()
+        detachLocalPreview()
+        super.onDestroy()
     }
 }
 

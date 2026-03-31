@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">QuickStart Kotlin</string>
+    <string name="camera_front_desc">当前前置摄像头，点击切换到后置</string>
+    <string name="camera_back_desc">当前后置摄像头，点击切换到前置</string>
 </resources>
