@@ -137,6 +137,18 @@ class PermissionHelp constructor(val activity: ComponentActivity) {
         appSettingLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    fun launchAppSettingForCameraAndMic(granted: () -> Unit, unGranted: () -> Unit) {
+        this.granted = {
+            if (hasCameraPerm() && hasMicPerm()) {
+                granted.invoke()
+            } else {
+                unGranted.invoke()
+            }
+        }
+        this.unGranted = unGranted
+        appSettingLauncher.launch(Manifest.permission.CAMERA)
+    }
+
     fun hasMicPerm(): Boolean {
         return ContextCompat.checkSelfPermission(
             activity,

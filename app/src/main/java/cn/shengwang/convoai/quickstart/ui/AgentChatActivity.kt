@@ -5,11 +5,11 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
-import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.Toast
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -20,13 +20,13 @@ import androidx.recyclerview.widget.RecyclerView
 import cn.shengwang.convoai.quickstart.R
 import cn.shengwang.convoai.quickstart.tools.PermissionHelp
 import cn.shengwang.convoai.quickstart.ui.common.BaseActivity
+import cn.shengwang.convoai.quickstart.video.CameraVideoInputManager
 import io.agora.convoai.convoaiApi.AgentState
 import io.agora.convoai.convoaiApi.Transcript
 import io.agora.convoai.convoaiApi.TranscriptType
 import cn.shengwang.convoai.quickstart.databinding.ActivityAgentChatBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptUserBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptAgentBinding
-import io.agora.rtc2.video.VideoCanvas
 import kotlinx.coroutines.launch
 
 /**
@@ -37,8 +37,10 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     private lateinit var viewModel: AgentChatViewModel
     private lateinit var mPermissionHelp: PermissionHelp
+    private lateinit var cameraVideoInputManager: CameraVideoInputManager
     private val transcriptAdapter: TranscriptAdapter = TranscriptAdapter()
-    private var localPreviewView: TextureView? = null
+    private var videoInputPreviewView: PreviewView? = null
+    private var isVideoInputStarted = false
 
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
@@ -52,6 +54,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         super.initData()
         viewModel = ViewModelProvider(this)[AgentChatViewModel::class.java]
         mPermissionHelp = PermissionHelp(this)
+        cameraVideoInputManager = CameraVideoInputManager(this) { frame ->
+            viewModel.pushExternalVideoFrame(frame)
+        }
         registerPcmDataListener()
 
         // Observe UI state changes
@@ -63,9 +68,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         // Observe debug log changes
         observeDebugLogs()
 
-        // Observe current camera facing state
-        observeCameraFacing()
-
         // Observe PCM capture state
         observePcmCaptureState()
     }
@@ -73,9 +75,98 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private fun registerPcmDataListener() {
         // TODO: Register Activity-level PCM callback here when raw PCM data needs to be consumed by UI
         // or forwarded to other business modules.
+        // If customer video comes from an external camera/device, feed frames through:
+        // viewModel.setExternalVideoPublishingEnabled(true)
+        // viewModel.pushExternalVideoFrame(frame)
+        // or:
+        // viewModel.setExternalVideoPublishingEnabled(true)
+        // viewModel.pushExternalNv21Frame(data, width, height, rotation)
+        //
         // Example:
-        viewModel.setOnPcmDataListener { data ->
-            // Handle raw PCM bytes.
+        // viewModel.setOnPcmDataListener { data ->
+        //     // Handle raw PCM bytes.
+        // }
+    }
+
+    private fun toggleVideoInput() {
+        if (isVideoInputStarted) {
+            stopVideoInput()
+            return
+        }
+        if (viewModel.uiState.value.connectionState != AgentChatViewModel.ConnectionState.Connected) {
+            Toast.makeText(
+                this,
+                "Connect to the agent first, then start video input.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        if (!mPermissionHelp.hasCameraPerm()) {
+            Toast.makeText(
+                this,
+                "Camera permission is requested before joining. Please rejoin after granting it.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        startVideoInput()
+    }
+
+    private fun startVideoInput() {
+        val binding = mBinding ?: return
+        if (!viewModel.setExternalVideoPublishingEnabled(true)) {
+            Toast.makeText(
+                this,
+                "Failed to enable external video publishing.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        if (videoInputPreviewView == null) {
+            val previewView = PreviewView(this)
+            binding.flLocalPreview.removeAllViews()
+            binding.flLocalPreview.addView(
+                previewView,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            videoInputPreviewView = previewView
+        }
+        binding.cardLocalPreview.visibility = View.VISIBLE
+        cameraVideoInputManager.start(videoInputPreviewView ?: return)
+        isVideoInputStarted = true
+        updateVideoInputButton()
+    }
+
+    private fun stopVideoInput() {
+        viewModel.setExternalVideoPublishingEnabled(false)
+        cameraVideoInputManager.stop()
+        mBinding?.apply {
+            flLocalPreview.removeAllViews()
+            cardLocalPreview.visibility = View.GONE
+        }
+        videoInputPreviewView = null
+        isVideoInputStarted = false
+        updateVideoInputButton()
+    }
+
+    private fun updateVideoInputButton() {
+        mBinding?.btnInputVideo?.apply {
+            text = if (isVideoInputStarted) {
+                context.getString(R.string.video_input_stop)
+            } else {
+                context.getString(R.string.video_input_start)
+            }
+            setBackgroundResource(
+                if (isVideoInputStarted) {
+                    R.drawable.selector_button_hangup
+                } else {
+                    R.drawable.selector_gradient_button
+                }
+            )
+            setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
         }
     }
 
@@ -94,7 +185,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 // Check camera and microphone permissions before joining channel
                 checkMediaPermissions { granted ->
                     if (granted) {
-                        attachLocalPreview()
                         viewModel.joinChannelAndLogin(channelName)
                     } else {
                         Toast.makeText(
@@ -111,9 +201,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 viewModel.toggleMute()
             }
 
-            // Switch camera button click listener
-            btnSwitchCamera.setOnClickListener {
-                viewModel.switchCamera()
+            btnInputVideo.setOnClickListener {
+                toggleVideoInput()
             }
 
             btnPcmCapture.setOnClickListener {
@@ -144,43 +233,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     }
 
     private fun handleMediaPermissionDenied(granted: (Boolean) -> Unit) {
-        when {
-            !mPermissionHelp.hasCameraPerm() -> {
-                showPermissionDialog(
-                    "Permission Required",
-                    "Camera permission is required to publish local video and show the preview window.",
-                    launchSettings = {
-                        mPermissionHelp.launchAppSettingForCamera(
-                            granted = { checkMediaPermissions(granted) },
-                            unGranted = { granted(false) }
-                        )
-                    },
-                    onDeclined = {
-                        granted(false)
-                    }
+        showPermissionDialog(
+            "Permission Required",
+            "Camera and microphone permissions are required before joining the channel and starting custom video capture.",
+            launchSettings = {
+                mPermissionHelp.launchAppSettingForCameraAndMic(
+                    granted = { checkMediaPermissions(granted) },
+                    unGranted = { granted(false) }
                 )
-            }
-
-            !mPermissionHelp.hasMicPerm() -> {
-                showPermissionDialog(
-                    "Permission Required",
-                    "Microphone permission is required for voice chat. Please grant the permission to continue.",
-                    launchSettings = {
-                        mPermissionHelp.launchAppSettingForMic(
-                            granted = { checkMediaPermissions(granted) },
-                            unGranted = { granted(false) }
-                        )
-                    },
-                    onDeclined = {
-                        granted(false)
-                    }
-                )
-            }
-
-            else -> {
+            },
+            onDeclined = {
                 granted(false)
             }
-        }
+        )
     }
 
     private fun showPermissionDialog(
@@ -203,36 +268,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             .setCancelable(false)
             .build()
             .show(supportFragmentManager, "permission_dialog")
-    }
-
-    private fun attachLocalPreview() {
-        val binding = mBinding ?: return
-        val rtcEngine = viewModel.getRtcEngine() ?: return
-
-        if (localPreviewView == null) {
-            val textureView = TextureView(this)
-            binding.flLocalPreview.removeAllViews()
-            binding.flLocalPreview.addView(
-                textureView,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-            rtcEngine.setupLocalVideo(VideoCanvas(textureView, VideoCanvas.RENDER_MODE_HIDDEN, 0))
-            localPreviewView = textureView
-        }
-
-        binding.cardLocalPreview.visibility = View.VISIBLE
-        viewModel.startLocalPreview()
-    }
-
-    private fun detachLocalPreview() {
-        mBinding?.apply {
-            flLocalPreview.removeAllViews()
-            cardLocalPreview.visibility = View.GONE
-        }
-        localPreviewView = null
     }
 
     /**
@@ -289,19 +324,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     // Show/hide buttons
                     llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
                     llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
-
-                    if (localPreviewView != null) {
-                        cardLocalPreview.visibility =
-                            if (isConnected || isConnecting) View.VISIBLE else View.GONE
-                    }
-
-                    val shouldTearDownPreview =
-                        localPreviewView != null &&
-                                (state.connectionState == AgentChatViewModel.ConnectionState.Idle ||
-                                        state.connectionState == AgentChatViewModel.ConnectionState.Error)
-                    if (shouldTearDownPreview) {
-                        viewModel.stopLocalPreview()
-                        detachLocalPreview()
+                    btnInputVideo.isEnabled = isConnected || isVideoInputStarted
+                    if (!isConnected && isVideoInputStarted) {
+                        stopVideoInput()
                     }
 
                     // Update button style based on connection state
@@ -386,26 +411,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 transcriptAdapter.submitList(transcriptList)
                 if (autoScrollToBottom) {
                     scrollToBottom()
-                }
-            }
-        }
-    }
-
-    private fun observeCameraFacing() {
-        lifecycleScope.launch {
-            viewModel.cameraFacing.collect { cameraFacing ->
-                mBinding?.btnSwitchCamera?.apply {
-                    when (cameraFacing) {
-                        AgentChatViewModel.CameraFacing.FRONT -> {
-                            setImageResource(R.drawable.ic_camera_front)
-                            contentDescription = context.getString(R.string.camera_front_desc)
-                        }
-
-                        AgentChatViewModel.CameraFacing.BACK -> {
-                            setImageResource(R.drawable.ic_camera_rear)
-                            contentDescription = context.getString(R.string.camera_back_desc)
-                        }
-                    }
                 }
             }
         }
@@ -507,8 +512,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     }
 
     override fun onDestroy() {
-        viewModel.stopLocalPreview()
-        detachLocalPreview()
+        stopVideoInput()
+        cameraVideoInputManager.release()
         super.onDestroy()
     }
 }

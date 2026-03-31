@@ -10,6 +10,7 @@ import cn.shengwang.convoai.quickstart.audio.PcmFileRecorder
 import cn.shengwang.convoai.quickstart.audio.PcmRecordAudioFrameObserver
 import cn.shengwang.convoai.quickstart.api.AgentStarter
 import cn.shengwang.convoai.quickstart.api.TokenGenerator
+import cn.shengwang.convoai.quickstart.video.ExternalVideoCaptureManager
 import io.agora.convoai.convoaiApi.AgentState
 import io.agora.convoai.convoaiApi.ConversationalAIAPIConfig
 import io.agora.convoai.convoaiApi.ConversationalAIAPIImpl
@@ -31,6 +32,7 @@ import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
+import io.agora.rtc2.video.AgoraVideoFrame
 import io.agora.rtm.ErrorInfo
 import io.agora.rtm.LinkStateEvent
 import io.agora.rtm.PresenceEvent
@@ -86,11 +88,6 @@ class AgentChatViewModel : ViewModel() {
         Error
     }
 
-    enum class CameraFacing {
-        FRONT,
-        BACK
-    }
-
     // UI State - shared between AgentHomeFragment and VoiceAssistantFragment
     data class ConversationUiState constructor(
         val isMuted: Boolean = false,
@@ -109,23 +106,16 @@ class AgentChatViewModel : ViewModel() {
     private val _pcmCaptureState = MutableStateFlow(PcmCaptureUiState())
     val pcmCaptureState: StateFlow<PcmCaptureUiState> = _pcmCaptureState.asStateFlow()
 
-    private val _cameraFacing = MutableStateFlow(CameraFacing.FRONT)
-    val cameraFacing: StateFlow<CameraFacing> = _cameraFacing.asStateFlow()
-
     // Transcript list - separate from UI state
     private val _transcriptList = MutableStateFlow<List<Transcript>>(emptyList())
     val transcriptList: StateFlow<List<Transcript>> = _transcriptList.asStateFlow()
 
-    private val _agentState = MutableStateFlow<AgentState>(AgentState.IDLE)
+    private val _agentState = MutableStateFlow(AgentState.IDLE)
     val agentState: StateFlow<AgentState?> = _agentState.asStateFlow()
 
     // Debug log list - for displaying logs in UI
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
     val debugLogList: StateFlow<List<String>> = _debugLogList.asStateFlow()
-
-    // Agent error events (one-shot, not state)
-    private val _agentError = MutableSharedFlow<ModuleError>(extraBufferCapacity = 1)
-    val agentError: SharedFlow<ModuleError> = _agentError.asSharedFlow()
 
     private var unifiedToken: String? = null
 
@@ -150,17 +140,19 @@ class AgentChatViewModel : ViewModel() {
         }
     }
     private var audioFrameObserverRegistered = false
+    private var externalVideoCaptureManager: ExternalVideoCaptureManager? = null
+    private var customVideoTrackPublished = false
 
     // RTC and RTM instances
     private var rtcEngine: RtcEngineEx? = null
     private var rtmClient: RtmClient? = null
     private var isRtmLogin = false
     private var isLoggingIn = false
-    private var isLocalPreviewRunning = false
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             viewModelScope.launch {
                 rtcJoined = true
+                externalVideoCaptureManager?.setFramePushEnabled(customVideoTrackPublished)
                 addStatusLog("Rtc onJoinChannelSuccess, channel:${channel} uid:$uid")
                 Log.d(TAG, "RTC joined channel: $channel, uid: $uid")
                 checkJoinAndLoginComplete()
@@ -170,6 +162,8 @@ class AgentChatViewModel : ViewModel() {
         override fun onLeaveChannel(stats: RtcStats?) {
             super.onLeaveChannel(stats)
             viewModelScope.launch {
+                customVideoTrackPublished = false
+                externalVideoCaptureManager?.setFramePushEnabled(false)
                 addStatusLog("Rtc onLeaveChannel")
             }
         }
@@ -198,6 +192,8 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onError(err: Int) {
             viewModelScope.launch {
+                customVideoTrackPublished = false
+                externalVideoCaptureManager?.setFramePushEnabled(false)
                 _uiState.value = _uiState.value.copy(
                     connectionState = ConnectionState.Error
                 )
@@ -271,7 +267,6 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onAgentError(agentUserId: String, error: ModuleError) {
             addStatusLog("Agent error: type=${error.type.value}, code=${error.code}, msg=${error.message}")
-            _agentError.tryEmit(error)
         }
 
         override fun onMessageError(agentUserId: String, error: MessageError) {
@@ -346,12 +341,31 @@ class AgentChatViewModel : ViewModel() {
                 loadExtensionProvider("ai_echo_cancellation_extension")
                 loadExtensionProvider("ai_noise_suppression_extension")
             }
+            externalVideoCaptureManager = ExternalVideoCaptureManager(rtcEngine!!)
             Log.d(TAG, "initRtcEngine success")
             Log.d(TAG, "current sdk version: ${RtcEngine.getSdkVersion()}")
             addStatusLog("RtcEngine init successfully")
         } catch (e: Exception) {
             Log.e(TAG, "initRtcEngine error: $e")
             addStatusLog("RtcEngine init failed")
+        }
+    }
+
+    private fun buildChannelMediaOptions(
+        publishCustomVideoTrack: Boolean,
+        customTrackId: Int? = null
+    ): ChannelMediaOptions {
+        return ChannelMediaOptions().apply {
+            clientRoleType = CLIENT_ROLE_BROADCASTER
+            publishMicrophoneTrack = true
+            publishCameraTrack = false
+            this.publishCustomVideoTrack = publishCustomVideoTrack
+            if (customTrackId != null && customTrackId >= 0) {
+                this.customVideoTrackId = customTrackId
+            }
+            autoSubscribeAudio = true
+            autoSubscribeVideo = true
+            startPreview = false
         }
     }
 
@@ -463,13 +477,11 @@ class AgentChatViewModel : ViewModel() {
     private fun joinRtcChannel(rtcToken: String, channelName: String, uid: Int) {
         Log.d(TAG, "joinChannel channelName: $channelName, localUid: $uid")
         // join rtc channel
-        val channelOptions = ChannelMediaOptions().apply {
-            clientRoleType = CLIENT_ROLE_BROADCASTER
-            publishMicrophoneTrack = true
-            publishCameraTrack = true
-            autoSubscribeAudio = true
-            autoSubscribeVideo = true
-        }
+        customVideoTrackPublished = false
+        val channelOptions = buildChannelMediaOptions(
+            publishCustomVideoTrack = false
+        )
+        externalVideoCaptureManager?.setFramePushEnabled(false)
         val ret = rtcEngine?.joinChannel(rtcToken, channelName, uid, channelOptions)
         Log.d(TAG, "Joining RTC channel: $channelName, uid: $uid")
         if (ret == ERR_OK) {
@@ -494,123 +506,6 @@ class AgentChatViewModel : ViewModel() {
     private fun muteLocalAudio(mute: Boolean) {
         Log.d(TAG, "muteLocalAudio $mute")
         rtcEngine?.adjustRecordingSignalVolume(if (mute) 0 else 100)
-    }
-
-    private fun registerBusinessAudioFrameObserver() {
-        if (audioFrameObserverRegistered) {
-            return
-        }
-        val transcriptAudioFrameObserver = conversationalAIAPI?.getAudioFrameObserver() ?: return
-        val observer = CombinedAudioFrameObserver(
-            listOf(transcriptAudioFrameObserver, pcmRecordAudioFrameObserver)
-        )
-        val registerResult = rtcEngine?.registerAudioFrameObserver(observer)
-        if (registerResult == ERR_OK) {
-            val recordResult = rtcEngine?.setRecordingAudioFrameParameters(
-                PcmRecordAudioFrameObserver.SAMPLE_RATE,
-                PcmRecordAudioFrameObserver.CHANNELS,
-                PcmRecordAudioFrameObserver.MODE,
-                PcmRecordAudioFrameObserver.SAMPLES_PER_CALL
-            )
-            audioFrameObserverRegistered = true
-            addStatusLog("AudioFrameObserver registered successfully")
-            if (recordResult != ERR_OK) {
-                addStatusLog("Recording audio frame params failed ret: $recordResult")
-            }
-        } else {
-            addStatusLog("AudioFrameObserver register failed ret: $registerResult")
-        }
-    }
-
-    fun togglePcmCapture() {
-        if (_pcmCaptureState.value.isSaving) {
-            stopPcmCaptureInternal()
-        } else {
-            startPcmCaptureInternal()
-        }
-    }
-
-    private fun startPcmCaptureInternal() {
-        if (_uiState.value.connectionState != ConnectionState.Connected) {
-            addStatusLog("PCM capture is only available after agent connected")
-            return
-        }
-        pcmFileRecorder.start().fold(
-            onSuccess = { file ->
-                _pcmCaptureState.value = PcmCaptureUiState(
-                    isSaving = true,
-                    fileName = file.name
-                )
-                addStatusLog("PCM saving started: ${file.name}")
-            },
-            onFailure = { exception ->
-                addStatusLog("PCM saving start failed: ${exception.message}")
-            }
-        )
-    }
-
-    private fun stopPcmCaptureInternal(logSavedResult: Boolean = true) {
-        val wasSaving = _pcmCaptureState.value.isSaving || pcmFileRecorder.isSaving()
-        if (!wasSaving) {
-            return
-        }
-        val currentFileName = _pcmCaptureState.value.fileName
-        pcmFileRecorder.stop().fold(
-            onSuccess = { file ->
-                _pcmCaptureState.value = PcmCaptureUiState()
-                if (logSavedResult) {
-                    val savedPath = file?.absolutePath
-                    if (savedPath != null) {
-                        addStatusLog("PCM saved: $savedPath")
-                    } else if (currentFileName != null) {
-                        addStatusLog("PCM saving stopped: $currentFileName")
-                    }
-                }
-            },
-            onFailure = { exception ->
-                _pcmCaptureState.value = PcmCaptureUiState()
-                addStatusLog("PCM saving stop failed: ${exception.message}")
-            }
-        )
-    }
-
-    fun setOnPcmDataListener(listener: ((ByteArray) -> Unit)?) {
-        pcmRecordAudioFrameObserver.setOnPcmDataListener(listener)
-    }
-
-    fun getRtcEngine(): RtcEngineEx? = rtcEngine
-
-    fun startLocalPreview() {
-        if (isLocalPreviewRunning) {
-            return
-        }
-        rtcEngine?.enableLocalVideo(true)
-        rtcEngine?.startPreview()
-        isLocalPreviewRunning = true
-        addStatusLog("Local video preview started")
-    }
-
-    fun stopLocalPreview() {
-        if (!isLocalPreviewRunning) {
-            return
-        }
-        rtcEngine?.stopPreview()
-        rtcEngine?.enableLocalVideo(false)
-        isLocalPreviewRunning = false
-        _cameraFacing.value = CameraFacing.FRONT
-        addStatusLog("Local video preview stopped")
-    }
-
-    fun switchCamera() {
-        val result = rtcEngine?.switchCamera() ?: return
-        if (result == ERR_OK) {
-            _cameraFacing.value =
-                if (_cameraFacing.value == CameraFacing.FRONT) CameraFacing.BACK else CameraFacing.FRONT
-            addStatusLog("Switch camera successfully")
-        } else {
-            addStatusLog("Switch camera failed ret: $result")
-            Log.e(TAG, "Switch camera failed, ret: $result")
-        }
     }
 
     /**
@@ -853,8 +748,8 @@ class AgentChatViewModel : ViewModel() {
                 }
 
                 leaveRtcChannel()
-                stopLocalPreview()
                 rtcJoined = false
+                customVideoTrackPublished = false
                 authToken = null
                 _uiState.value = _uiState.value.copy(
                     connectionState = ConnectionState.Idle
@@ -871,7 +766,6 @@ class AgentChatViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         stopPcmCaptureInternal()
-        stopLocalPreview()
         leaveRtcChannel()
         logoutRtm()
         conversationalAIAPI?.removeHandler(conversationalAIAPIEventHandler)
@@ -889,7 +783,215 @@ class AgentChatViewModel : ViewModel() {
 
         // Note: RtcEngine.destroy() should be called carefully as it's a global operation
         // Consider managing RTC engine lifecycle at Application level
+        externalVideoCaptureManager?.release()
+        externalVideoCaptureManager = null
         rtcEngine = null
         rtmClient = null
+    }
+
+    private fun registerBusinessAudioFrameObserver() {
+        if (audioFrameObserverRegistered) {
+            return
+        }
+        val transcriptAudioFrameObserver = conversationalAIAPI?.getAudioFrameObserver() ?: return
+        val observer = CombinedAudioFrameObserver(
+            listOf(transcriptAudioFrameObserver, pcmRecordAudioFrameObserver)
+        )
+        val registerResult = rtcEngine?.registerAudioFrameObserver(observer)
+        if (registerResult == ERR_OK) {
+            val recordResult = rtcEngine?.setRecordingAudioFrameParameters(
+                PcmRecordAudioFrameObserver.SAMPLE_RATE,
+                PcmRecordAudioFrameObserver.CHANNELS,
+                PcmRecordAudioFrameObserver.MODE,
+                PcmRecordAudioFrameObserver.SAMPLES_PER_CALL
+            )
+            audioFrameObserverRegistered = true
+            addStatusLog("AudioFrameObserver registered successfully")
+            if (recordResult != ERR_OK) {
+                addStatusLog("Recording audio frame params failed ret: $recordResult")
+            }
+        } else {
+            addStatusLog("AudioFrameObserver register failed ret: $registerResult")
+        }
+    }
+
+    /**
+     * 切换 PCM 原始音频保存状态。
+     *
+     * 当前未保存时会启动 PCM 采集并落盘；如果已经在保存，则停止采集并
+     * 关闭当前文件。该能力仅在 Agent 已连接后可用。
+     */
+    fun togglePcmCapture() {
+        if (_pcmCaptureState.value.isSaving) {
+            stopPcmCaptureInternal()
+        } else {
+            startPcmCaptureInternal()
+        }
+    }
+
+    private fun startPcmCaptureInternal() {
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            addStatusLog("PCM capture is only available after agent connected")
+            return
+        }
+        pcmFileRecorder.start().fold(
+            onSuccess = { file ->
+                _pcmCaptureState.value = PcmCaptureUiState(
+                    isSaving = true,
+                    fileName = file.name
+                )
+                addStatusLog("PCM saving started: ${file.name}")
+            },
+            onFailure = { exception ->
+                addStatusLog("PCM saving start failed: ${exception.message}")
+            }
+        )
+    }
+
+    private fun stopPcmCaptureInternal(logSavedResult: Boolean = true) {
+        val wasSaving = _pcmCaptureState.value.isSaving || pcmFileRecorder.isSaving()
+        if (!wasSaving) {
+            return
+        }
+        val currentFileName = _pcmCaptureState.value.fileName
+        pcmFileRecorder.stop().fold(
+            onSuccess = { file ->
+                _pcmCaptureState.value = PcmCaptureUiState()
+                if (logSavedResult) {
+                    val savedPath = file?.absolutePath
+                    if (savedPath != null) {
+                        addStatusLog("PCM saved: $savedPath")
+                    } else if (currentFileName != null) {
+                        addStatusLog("PCM saving stopped: $currentFileName")
+                    }
+                }
+            },
+            onFailure = { exception ->
+                _pcmCaptureState.value = PcmCaptureUiState()
+                addStatusLog("PCM saving stop failed: ${exception.message}")
+            }
+        )
+    }
+
+    /**
+     * 注册业务侧 PCM 数据回调。
+     *
+     * 回调数据来自当前录制音频帧观察器，适合用于原始音频保存、转发
+     * 或接入自定义音频分析逻辑；传入 `null` 可取消监听。
+     *
+     * @param listener PCM 数据监听器，参数为每次回调的原始字节数组
+     */
+    fun setOnPcmDataListener(listener: ((ByteArray) -> Unit)?) {
+        pcmRecordAudioFrameObserver.setOnPcmDataListener(listener)
+    }
+
+    /**
+     * 开启或关闭 RTC 自定义视频发布。
+     *
+     * 开启时会确保自定义视频轨存在，并通过 `updateChannelMediaOptions`
+     * 把该轨道发布到频道；关闭时会立即停止继续推帧，并取消当前自定义
+     * 视频发布。该方法通常在业务侧开始/停止外部视频输入前后调用。
+     *
+     * @param enabled `true` 表示开启自定义视频发布，`false` 表示关闭
+     * @return `true` 表示切换成功，`false` 表示切换失败
+     */
+    fun setExternalVideoPublishingEnabled(enabled: Boolean): Boolean {
+        val manager = externalVideoCaptureManager ?: return false
+
+        if (!enabled) {
+            manager.setFramePushEnabled(false)
+            if (!rtcJoined) {
+                customVideoTrackPublished = false
+                return true
+            }
+        } else if (customVideoTrackPublished) {
+            manager.setFramePushEnabled(true)
+            return true
+        } else if (!rtcJoined) {
+            addStatusLog("External video publishing requires an active RTC connection")
+            return false
+        }
+
+        val customTrackId = if (enabled) {
+            manager.ensureCustomVideoTrack()
+        } else {
+            manager.getCustomVideoTrackId()
+        }
+
+        if (enabled && customTrackId < 0) {
+            addStatusLog("Create custom video track failed ret: $customTrackId")
+            return false
+        }
+
+        val result = rtcEngine?.updateChannelMediaOptions(
+            buildChannelMediaOptions(
+                publishCustomVideoTrack = enabled,
+                customTrackId = customTrackId.takeIf { it >= 0 }
+            )
+        ) ?: -1
+
+        return if (result == ERR_OK) {
+            customVideoTrackPublished = enabled
+            manager.setFramePushEnabled(enabled)
+            addStatusLog(
+                if (enabled) {
+                    "External video publishing enabled"
+                } else {
+                    "External video publishing disabled"
+                }
+            )
+            true
+        } else {
+            addStatusLog(
+                if (enabled) {
+                    "Enable external video publishing failed ret: $result"
+                } else {
+                    "Disable external video publishing failed ret: $result"
+                }
+            )
+            false
+        }
+    }
+
+    /**
+     * 推送一帧业务侧已经组装好的外部视频帧。
+     *
+     * 调用前需要先确保 RTC 已加入频道，并通过 [setExternalVideoPublishingEnabled]
+     * 打开自定义视频发布；否则该帧会被直接丢弃。
+     *
+     * @param frame 业务侧构造完成的 Agora 视频帧对象
+     * @return SDK 推帧结果，`0` 表示成功，负数表示失败
+     */
+    fun pushExternalVideoFrame(frame: AgoraVideoFrame): Int {
+        return externalVideoCaptureManager?.pushExternalVideoFrame(frame) ?: -1
+    }
+
+    /**
+     * 直接以 NV21 原始数据推送一帧外部视频。
+     *
+     * 适用于业务侧拿到摄像头、采集卡或其他外设输出的 NV21 数据后，
+     * 不再手动组装 [AgoraVideoFrame]，而是通过该方法快速送入 RTC。
+     *
+     * @param data NV21 格式的原始视频帧数据
+     * @param width 帧宽，单位为像素
+     * @param height 帧高，单位为像素
+     * @param rotation 画面顺时针旋转角度，默认 `0`
+     * @param timestampMs 帧时间戳，单位为毫秒，默认使用当前系统时间
+     * @return SDK 推帧结果，`0` 表示成功，负数表示失败
+     */
+    fun pushExternalNv21Frame(
+        data: ByteArray,
+        width: Int,
+        height: Int,
+        rotation: Int = 0,
+        timestampMs: Long = System.currentTimeMillis()
+    ): Int {
+        return externalVideoCaptureManager?.pushExternalNv21Frame(
+            data = data,
+            width = width,
+            height = height,
+            rotation = rotation,
+            timestampMs = timestampMs
+        ) ?: -1
     }
 }
