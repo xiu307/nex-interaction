@@ -71,7 +71,23 @@
    })
    ```
 
-4. **订阅频道消息**
+4. **在业务层注册唯一的 AudioFrameObserver**
+
+   `convoaiApi` 不再内部直接调用 `registerAudioFrameObserver()`。
+   业务层需要获取字幕组件所需的 observer，并与自己的音频处理 observer 合并后统一注册一次：
+
+   ```kotlin
+   val transcriptObserver = api.getAudioFrameObserver()
+   val businessObserver = MyBusinessAudioFrameObserver()
+   val combinedObserver = CombinedAudioFrameObserver(listOf(transcriptObserver, businessObserver))
+
+   rtcEngine.registerAudioFrameObserver(combinedObserver)
+   rtcEngine.setRecordingAudioFrameParameters(16000, 1, 0, 3200)
+   ```
+
+   如果业务不需要录制 PCM，也至少需要注册 `api.getAudioFrameObserver()`，以保证字级字幕的时间戳链路正常工作。
+
+5. **订阅频道消息**
 
    在开始会话前调用：
    ```kotlin
@@ -82,7 +98,7 @@
    }
    ```
 
-5. **（可选）加入 RTC 频道前设置音频参数**
+6. **（可选）加入 RTC 频道前设置音频参数**
 
    ```kotlin
    api.loadAudioSettings()
@@ -97,7 +113,7 @@
    rtcEngine.joinChannel(token, channelName, null, userId)
    ```
 
-6. **（可选 发送消息给 AI agent**
+7. **（可选）发送消息给 AI agent**
 
    **发送文本消息：**
    ```kotlin
@@ -134,13 +150,13 @@
    }
    ```
 
-7. **（可选）打断 agent**
+8. **（可选）打断 agent**
 
    ```kotlin
    api.interrupt("agentId") { error -> /* ... */ }
    ```
 
-8. **销毁 API 实例**
+9. **销毁 API 实例**
 
    ```kotlin
    api.destroy()

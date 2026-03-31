@@ -2,6 +2,7 @@ package io.agora.convoai.convoaiApi
 
 import android.util.Log
 import io.agora.rtc2.Constants
+import io.agora.rtc2.IAudioFrameObserver
 import io.agora.rtc2.IRtcEngineEventHandler
 
 import org.json.JSONObject
@@ -553,6 +554,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         callMessagePrint(TAG, ">>> [loadAudioSettings] scenario:$scenario")
         config.rtcEngine.setAudioScenario(scenario)
         setAudioConfigParameters(audioRouting)
+    }
+
+    override fun getAudioFrameObserver(): IAudioFrameObserver {
+        return transcriptController.getAudioFrameObserver()
     }
 
     override fun destroy() {

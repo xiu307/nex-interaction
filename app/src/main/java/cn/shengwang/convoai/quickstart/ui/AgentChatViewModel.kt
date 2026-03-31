@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.shengwang.convoai.quickstart.AgentApp
 import cn.shengwang.convoai.quickstart.KeyCenter
+import cn.shengwang.convoai.quickstart.audio.CombinedAudioFrameObserver
+import cn.shengwang.convoai.quickstart.audio.PcmFileRecorder
+import cn.shengwang.convoai.quickstart.audio.PcmRecordAudioFrameObserver
 import cn.shengwang.convoai.quickstart.api.AgentStarter
 import cn.shengwang.convoai.quickstart.api.TokenGenerator
 import io.agora.convoai.convoaiApi.AgentState
@@ -95,8 +98,16 @@ class AgentChatViewModel : ViewModel() {
         val connectionState: ConnectionState = ConnectionState.Idle
     )
 
+    data class PcmCaptureUiState(
+        val isSaving: Boolean = false,
+        val fileName: String? = null
+    )
+
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
+
+    private val _pcmCaptureState = MutableStateFlow(PcmCaptureUiState())
+    val pcmCaptureState: StateFlow<PcmCaptureUiState> = _pcmCaptureState.asStateFlow()
 
     private val _cameraFacing = MutableStateFlow(CameraFacing.FRONT)
     val cameraFacing: StateFlow<CameraFacing> = _cameraFacing.asStateFlow()
@@ -129,6 +140,16 @@ class AgentChatViewModel : ViewModel() {
     private var agentId: String? = null
     // Auth token for REST API (app-credentials mode)
     private var authToken: String? = null
+    private val pcmFileRecorder = PcmFileRecorder(AgentApp.instance())
+    private val pcmRecordAudioFrameObserver = PcmRecordAudioFrameObserver { audioData ->
+        pcmFileRecorder.append(audioData).onFailure { exception ->
+            viewModelScope.launch {
+                stopPcmCaptureInternal(logSavedResult = false)
+                addStatusLog("PCM save failed: ${exception.message}")
+            }
+        }
+    }
+    private var audioFrameObserverRegistered = false
 
     // RTC and RTM instances
     private var rtcEngine: RtcEngineEx? = null
@@ -293,6 +314,7 @@ class AgentChatViewModel : ViewModel() {
                     enableLog = true
                 )
             )
+            registerBusinessAudioFrameObserver()
             conversationalAIAPI?.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
             conversationalAIAPI?.addHandler(conversationalAIAPIEventHandler)
             Log.d(TAG, "RTC engine and RTM client created successfully")
@@ -472,6 +494,88 @@ class AgentChatViewModel : ViewModel() {
     private fun muteLocalAudio(mute: Boolean) {
         Log.d(TAG, "muteLocalAudio $mute")
         rtcEngine?.adjustRecordingSignalVolume(if (mute) 0 else 100)
+    }
+
+    private fun registerBusinessAudioFrameObserver() {
+        if (audioFrameObserverRegistered) {
+            return
+        }
+        val transcriptAudioFrameObserver = conversationalAIAPI?.getAudioFrameObserver() ?: return
+        val observer = CombinedAudioFrameObserver(
+            listOf(transcriptAudioFrameObserver, pcmRecordAudioFrameObserver)
+        )
+        val registerResult = rtcEngine?.registerAudioFrameObserver(observer)
+        if (registerResult == ERR_OK) {
+            val recordResult = rtcEngine?.setRecordingAudioFrameParameters(
+                PcmRecordAudioFrameObserver.SAMPLE_RATE,
+                PcmRecordAudioFrameObserver.CHANNELS,
+                PcmRecordAudioFrameObserver.MODE,
+                PcmRecordAudioFrameObserver.SAMPLES_PER_CALL
+            )
+            audioFrameObserverRegistered = true
+            addStatusLog("AudioFrameObserver registered successfully")
+            if (recordResult != ERR_OK) {
+                addStatusLog("Recording audio frame params failed ret: $recordResult")
+            }
+        } else {
+            addStatusLog("AudioFrameObserver register failed ret: $registerResult")
+        }
+    }
+
+    fun togglePcmCapture() {
+        if (_pcmCaptureState.value.isSaving) {
+            stopPcmCaptureInternal()
+        } else {
+            startPcmCaptureInternal()
+        }
+    }
+
+    private fun startPcmCaptureInternal() {
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            addStatusLog("PCM capture is only available after agent connected")
+            return
+        }
+        pcmFileRecorder.start().fold(
+            onSuccess = { file ->
+                _pcmCaptureState.value = PcmCaptureUiState(
+                    isSaving = true,
+                    fileName = file.name
+                )
+                addStatusLog("PCM saving started: ${file.name}")
+            },
+            onFailure = { exception ->
+                addStatusLog("PCM saving start failed: ${exception.message}")
+            }
+        )
+    }
+
+    private fun stopPcmCaptureInternal(logSavedResult: Boolean = true) {
+        val wasSaving = _pcmCaptureState.value.isSaving || pcmFileRecorder.isSaving()
+        if (!wasSaving) {
+            return
+        }
+        val currentFileName = _pcmCaptureState.value.fileName
+        pcmFileRecorder.stop().fold(
+            onSuccess = { file ->
+                _pcmCaptureState.value = PcmCaptureUiState()
+                if (logSavedResult) {
+                    val savedPath = file?.absolutePath
+                    if (savedPath != null) {
+                        addStatusLog("PCM saved: $savedPath")
+                    } else if (currentFileName != null) {
+                        addStatusLog("PCM saving stopped: $currentFileName")
+                    }
+                }
+            },
+            onFailure = { exception ->
+                _pcmCaptureState.value = PcmCaptureUiState()
+                addStatusLog("PCM saving stop failed: ${exception.message}")
+            }
+        )
+    }
+
+    fun setOnPcmDataListener(listener: ((ByteArray) -> Unit)?) {
+        pcmRecordAudioFrameObserver.setOnPcmDataListener(listener)
     }
 
     fun getRtcEngine(): RtcEngineEx? = rtcEngine
@@ -723,6 +827,7 @@ class AgentChatViewModel : ViewModel() {
     fun hangup() {
         viewModelScope.launch {
             try {
+                stopPcmCaptureInternal()
                 conversationalAIAPI?.unsubscribeMessage(channelName) { errorInfo ->
                     if (errorInfo != null) {
                         Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
@@ -765,9 +870,13 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        stopPcmCaptureInternal()
         stopLocalPreview()
         leaveRtcChannel()
         logoutRtm()
+        conversationalAIAPI?.removeHandler(conversationalAIAPIEventHandler)
+        conversationalAIAPI?.destroy()
+        conversationalAIAPI = null
 
         // Cleanup RTM client
         rtmClient?.let { client ->

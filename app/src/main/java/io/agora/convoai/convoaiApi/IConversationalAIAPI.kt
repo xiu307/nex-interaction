@@ -1,6 +1,7 @@
 package io.agora.convoai.convoaiApi
 
 import io.agora.rtc2.Constants
+import io.agora.rtc2.IAudioFrameObserver
 import io.agora.rtc2.RtcEngine
 import io.agora.rtm.RtmClient
 
@@ -721,8 +722,16 @@ interface IConversationalAIAPI {
      * // For standard mode
      * api.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT) // <-- MUST be called before joinChannel!
      * rtcEngine.joinChannel(token, channelName, null, userId)
-     */
+    */
     fun loadAudioSettings(scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT)
+
+    /**
+     * Return the internal audio frame observer required by the transcript module.
+     *
+     * The business layer must register a single AudioFrameObserver with RTC and should merge this
+     * observer with any custom audio observers it owns.
+     */
+    fun getAudioFrameObserver(): IAudioFrameObserver
 
     /**
      * Destroy the API instance and release resources. After calling, this instance cannot be used again.

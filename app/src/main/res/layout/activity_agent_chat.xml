@@ -212,7 +212,7 @@
 
         <View
             android:id="@+id/spacer1"
-            android:layout_width="24dp"
+            android:layout_width="16dp"
             android:layout_height="match_parent" />
 
         <androidx.appcompat.widget.AppCompatImageButton
@@ -226,8 +226,26 @@
 
         <View
             android:id="@+id/spacer2"
-            android:layout_width="24dp"
+            android:layout_width="16dp"
             android:layout_height="match_parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPcmCapture"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/selector_gradient_button"
+            android:letterSpacing="0.02"
+            android:text="@string/pcm_capture_start"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="@null"
+            app:cornerRadius="8dp"
+            app:elevation="0dp"
+            app:rippleColor="#33FFFFFF" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStop"

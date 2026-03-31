@@ -182,113 +182,111 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
         }
     }
 
+    private val audioFrameObserver = object : IAudioFrameObserver {
+        override fun onRecordAudioFrame(
+            channelId: String?,
+            type: Int,
+            samplesPerChannel: Int,
+            bytesPerSample: Int,
+            channels: Int,
+            samplesPerSec: Int,
+            buffer: ByteBuffer?,
+            renderTimeMs: Long,
+            avsync_type: Int
+        ): Boolean {
+            return false
+        }
+
+        override fun onPlaybackAudioFrame(
+            channelId: String?,
+            type: Int,
+            samplesPerChannel: Int,
+            bytesPerSample: Int,
+            channels: Int,
+            samplesPerSec: Int,
+            buffer: ByteBuffer?,
+            renderTimeMs: Long,
+            avsync_type: Int
+        ): Boolean {
+            return false
+        }
+
+        override fun onMixedAudioFrame(
+            channelId: String?,
+            type: Int,
+            samplesPerChannel: Int,
+            bytesPerSample: Int,
+            channels: Int,
+            samplesPerSec: Int,
+            buffer: ByteBuffer?,
+            renderTimeMs: Long,
+            avsync_type: Int
+        ): Boolean {
+            return false
+        }
+
+        override fun onEarMonitoringAudioFrame(
+            type: Int,
+            samplesPerChannel: Int,
+            bytesPerSample: Int,
+            channels: Int,
+            samplesPerSec: Int,
+            buffer: ByteBuffer?,
+            renderTimeMs: Long,
+            avsync_type: Int
+        ): Boolean {
+            return false
+        }
+
+        override fun onPlaybackAudioFrameBeforeMixing(
+            channelId: String?,
+            uid: Int,
+            type: Int,
+            samplesPerChannel: Int,
+            bytesPerSample: Int,
+            channels: Int,
+            samplesPerSec: Int,
+            buffer: ByteBuffer?,
+            renderTimeMs: Long,
+            avsync_type: Int,
+            rtpTimestamp: Int,
+            presentationMs: Long
+        ): Boolean {
+            if (presentationMs > 0L) {
+                mPresentationMs = presentationMs
+            } else if (mRenderMode == TranscriptRenderMode.Word) {
+                callMessagePrint(TAG, "<<< [!][onPlaybackAudioFrameBeforeMixing] pts is $presentationMs")
+            }
+            return false
+        }
+
+        override fun getObservedAudioFramePosition(): Int {
+            return Constants.POSITION_BEFORE_MIXING
+        }
+
+        override fun getRecordAudioParams(): AudioParams? {
+            return null
+        }
+
+        override fun getPlaybackAudioParams(): AudioParams? {
+            return null
+        }
+
+        override fun getMixedAudioParams(): AudioParams? {
+            return null
+        }
+
+        override fun getEarMonitoringAudioParams(): AudioParams? {
+            return null
+        }
+    }
+
     private fun runOnMainThread(r: Runnable) {
         ConversationalAIUtils.runOnMainThread(r)
     }
 
     init {
         config.rtcEngine.addHandler(this)
-        config.rtcEngine.registerAudioFrameObserver(object : IAudioFrameObserver {
-            override fun onRecordAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return false
-            }
-
-            override fun onPlaybackAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return false
-            }
-
-            override fun onMixedAudioFrame(
-                channelId: String?,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return false
-            }
-
-            override fun onEarMonitoringAudioFrame(
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int
-            ): Boolean {
-                return false
-            }
-
-            override fun onPlaybackAudioFrameBeforeMixing(
-                channelId: String?,
-                uid: Int,
-                type: Int,
-                samplesPerChannel: Int,
-                bytesPerSample: Int,
-                channels: Int,
-                samplesPerSec: Int,
-                buffer: ByteBuffer?,
-                renderTimeMs: Long,
-                avsync_type: Int,
-                rtpTimestamp: Int,
-                presentationMs: Long
-            ): Boolean {
-                // Pass render time to transcript controller
-                if (presentationMs > 0L) {
-                    mPresentationMs = presentationMs
-                } else {
-                    if (mRenderMode == TranscriptRenderMode.Word) {
-                        callMessagePrint(TAG, "<<< [!][onPlaybackAudioFrameBeforeMixing] pts is $presentationMs")
-                    }
-                }
-                return false
-            }
-
-            override fun getObservedAudioFramePosition(): Int {
-                return Constants.POSITION_BEFORE_MIXING
-            }
-
-            override fun getRecordAudioParams(): AudioParams? {
-                return null
-            }
-
-            override fun getPlaybackAudioParams(): AudioParams? {
-                return null
-            }
-
-            override fun getMixedAudioParams(): AudioParams? {
-                return null
-            }
-
-            override fun getEarMonitoringAudioParams(): AudioParams? {
-                return null
-            }
-        })
         config.rtcEngine.setPlaybackAudioFrameBeforeMixingParameters(44100, 1)
         callMessagePrint(
             TAG,
@@ -320,7 +318,13 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
     fun release() {
         reset()
         callMessagePrint(TAG, ">>> [release]")
+        config.rtcEngine.removeHandler(this)
+        config.rtmClient.removeEventListener(covRtmMsgProxy)
         coroutineScope.cancel()
+    }
+
+    fun getAudioFrameObserver(): IAudioFrameObserver {
+        return audioFrameObserver
     }
 
     private fun startSubtitleTicker() {

@@ -52,6 +52,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         super.initData()
         viewModel = ViewModelProvider(this)[AgentChatViewModel::class.java]
         mPermissionHelp = PermissionHelp(this)
+        registerPcmDataListener()
 
         // Observe UI state changes
         observeUiState()
@@ -64,6 +65,18 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
         // Observe current camera facing state
         observeCameraFacing()
+
+        // Observe PCM capture state
+        observePcmCaptureState()
+    }
+
+    private fun registerPcmDataListener() {
+        // TODO: Register Activity-level PCM callback here when raw PCM data needs to be consumed by UI
+        // or forwarded to other business modules.
+        // Example:
+        viewModel.setOnPcmDataListener { data ->
+            // Handle raw PCM bytes.
+        }
     }
 
     override fun initView() {
@@ -101,6 +114,10 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             // Switch camera button click listener
             btnSwitchCamera.setOnClickListener {
                 viewModel.switchCamera()
+            }
+
+            btnPcmCapture.setOnClickListener {
+                viewModel.togglePcmCapture()
             }
 
             // Stop button click listener
@@ -392,6 +409,29 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 }
             }
         }
+    }
+
+    private fun observePcmCaptureState() {
+        lifecycleScope.launch {
+            viewModel.pcmCaptureState.collect { pcmState ->
+                mBinding?.btnPcmCapture?.apply {
+                    text = if (pcmState.isSaving) {
+                        context.getString(R.string.pcm_capture_stop)
+                    } else {
+                        context.getString(R.string.pcm_capture_start)
+                    }
+                    setBackgroundResource(
+                        if (pcmState.isSaving) {
+                            R.drawable.selector_button_hangup
+                        } else {
+                            R.drawable.selector_gradient_button
+                        }
+                    )
+                    setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
+                }
+            }
+        }
+
     }
 
     private fun observeDebugLogs() {
