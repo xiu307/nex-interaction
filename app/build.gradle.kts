@@ -21,8 +21,6 @@ val requiredProperties = listOf(
     "APP_ID",
     "APP_CERTIFICATE",
     "LLM_API_KEY",
-    "TTS_BYTEDANCE_APP_ID",
-    "TTS_BYTEDANCE_TOKEN"
 )
 
 val missingProperties = mutableListOf<String>()
@@ -44,6 +42,9 @@ if (missingProperties.isNotEmpty()) {
     throw GradleException(errorMessage)
 }
 
+/** Escape for embedding env string values inside Java string literals in BuildConfig. */
+fun quoteForBuildConfig(value: String): String =
+    value.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "cn.shengwang.convoai.quickstart"
@@ -68,14 +69,52 @@ android {
         buildConfigField("String", "APP_CERTIFICATE", "\"${envProperties.getProperty("APP_CERTIFICATE", "")}\"")
 
         // LLM configuration
-        // providers.md baseline only requires LLM_API_KEY; URL/model can use defaults.
         buildConfigField("String", "LLM_API_KEY", "\"${envProperties.getProperty("LLM_API_KEY", "")}\"")
         buildConfigField("String", "LLM_URL", "\"${envProperties.getProperty("LLM_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")}\"")
         buildConfigField("String", "LLM_MODEL", "\"${envProperties.getProperty("LLM_MODEL", "qwen-plus")}\"")
+        buildConfigField("String", "LLM_VENDOR", "\"${quoteForBuildConfig(envProperties.getProperty("LLM_VENDOR", ""))}\"")
+        buildConfigField(
+            "String",
+            "LLM_PARRAMS",
+            "\"${quoteForBuildConfig(envProperties.getProperty("LLM_PARRAMS", ""))}\""
+        )
+        buildConfigField(
+            "String",
+            "LLM_SYSTEM_MESSAGES",
+            "\"${quoteForBuildConfig(envProperties.getProperty("LLM_SYSTEM_MESSAGES", ""))}\""
+        )
+        buildConfigField(
+            "String",
+            "LLM_MAX_HISTORY",
+            "\"${envProperties.getProperty("LLM_MAX_HISTORY", "").trim()}\""
+        )
 
-        // TTS configuration
+        // ASR (open-source style pipeline)
+        buildConfigField("String", "ASR_LANG", "\"${quoteForBuildConfig(envProperties.getProperty("ASR_LANG", ""))}\"")
+        buildConfigField("String", "ASR_VENDOR", "\"${quoteForBuildConfig(envProperties.getProperty("ASR_VENDOR", ""))}\"")
+        buildConfigField("String", "ASR_PARAMS", "\"${quoteForBuildConfig(envProperties.getProperty("ASR_PARAMS", ""))}\"")
+
+        // TTS configuration (vendor + JSON params; optional legacy ByteDance fields for KeyCenter)
+        buildConfigField("String", "TTS_VENDOR", "\"${quoteForBuildConfig(envProperties.getProperty("TTS_VENDOR", ""))}\"")
+        buildConfigField("String", "TTS_PARAMS", "\"${quoteForBuildConfig(envProperties.getProperty("TTS_PARAMS", ""))}\"")
         buildConfigField("String", "TTS_BYTEDANCE_APP_ID", "\"${envProperties.getProperty("TTS_BYTEDANCE_APP_ID", "")}\"")
         buildConfigField("String", "TTS_BYTEDANCE_TOKEN", "\"${envProperties.getProperty("TTS_BYTEDANCE_TOKEN", "")}\"")
+        // SAL sample_urls（对齐 CovLivingViewModel.buildSalSampleUrls：无本地 biometric 条目时用实验室 PCM）
+        buildConfigField(
+            "Boolean",
+            "SAL_ENABLE_PERSONALIZED",
+            "${envProperties.getProperty("SAL_ENABLE_PERSONALIZED", "false").equals("true", ignoreCase = true)}"
+        )
+        buildConfigField(
+            "String",
+            "SAL_PERSONALIZED_PCM_URL",
+            "\"${quoteForBuildConfig(envProperties.getProperty("SAL_PERSONALIZED_PCM_URL", ""))}\""
+        )
+        buildConfigField(
+            "String",
+            "SAL_BIOMETRIC_SAMPLE_URLS",
+            "\"${quoteForBuildConfig(envProperties.getProperty("SAL_BIOMETRIC_SAMPLE_URLS", ""))}\""
+        )
     }
 
     buildTypes {

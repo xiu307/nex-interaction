@@ -21,8 +21,12 @@ import org.json.JSONObject
  */
 object AgentStarter {
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
-    private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
-
+    private const val API_BASE_URL = "https://api.sd-rtn.com/cn/api/conversational-ai-agent/v2/projects"
+    /** 实验室预置声纹（SAL sample_urls 键与 PCM URL） */
+    private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
+    private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
+    private const val SAL_LAB_PCM_URL_SPEAKER1 = "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
+    private const val SAL_LAB_PCM_URL_SPEAKER2 = "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
     private val okHttpClient: OkHttpClient by lazy {
         SecureOkHttpClient.create()
             .build()
@@ -86,7 +90,8 @@ object AgentStarter {
 
     /**
      * Build JSON payload with inline ASR/LLM/TTS pipeline configuration.
-     * Matches the Shengwang Conversational AI REST API v2 format.
+     * Aligns with open-source body shape (see CovLivingViewModel.getConvoaiOpenSourceBodyMap): ASR/LLM/TTS
+     * from [KeyCenter], no `avatar` block.
      */
     private fun buildJsonPayload(
         name: String,
@@ -105,55 +110,129 @@ object AgentStarter {
                 put("enable_string_uid", false)
                 put("idle_timeout", 120)
 
-                // Advanced features
                 put("advanced_features", JSONObject().apply {
+                    put("enable_aivad", false)
+                    put("enable_bhvs", true)
                     put("enable_rtm", true)
+                    put("enable_sal", true)
                 })
 
-                // ASR - Shengwang Fengming
-                put("asr", JSONObject().apply {
-                    put("vendor", "fengming")
-                    put("language", "zh-CN")
+                put("asr", buildAsrJson())
+
+                put("llm", buildLlmJson(agentRtcUid.toLongOrNull() ?: 0L))
+
+                put("tts", buildTtsJson())
+
+                put("sal", JSONObject().apply {
+                    put("sal_mode", "recognition")
+                    put(
+                        "sample_urls",
+                        buildSalSampleUrlsJson(KeyCenter.SAL_ENABLE_PERSONALIZED, agentRtcUid)
+                    )
                 })
 
-                // LLM - Qwen via DashScope OpenAI-compatible endpoint
-                put("llm", JSONObject().apply {
-                    put("url", KeyCenter.LLM_URL)
-                    put("api_key", KeyCenter.LLM_API_KEY)
-                    put("vendor", "aliyun")
-                    put("system_messages", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "system")
-                            put("content", "你是一名有帮助的 AI 助手。")
-                        })
-                    })
-                    put("greeting_message", "你好！我是你的 AI 助手，有什么可以帮你？")
-                    put("failure_message", "抱歉，我暂时处理不了你的请求，请稍后再试。")
-                    put("params", JSONObject().apply {
-                        put("model", KeyCenter.LLM_MODEL)
-                    })
-                })
-
-                // TTS - Volcengine / ByteDance
-                put("tts", JSONObject().apply {
-                    put("vendor", "bytedance")
-                    put("params", JSONObject().apply {
-                        put("token", KeyCenter.TTS_BYTEDANCE_TOKEN)
-                        put("app_id", KeyCenter.TTS_BYTEDANCE_APP_ID)
-                        put("cluster", "volcano_tts")
-                        put("voice_type", "BV700_streaming")
-                        put("speed_ratio", 1.0)
-                        put("volume_ratio", 1.0)
-                        put("pitch_ratio", 1.0)
-                    })
-                })
-
-                // Parameters
                 put("parameters", JSONObject().apply {
                     put("data_channel", "rtm")
+                    put("enable_flexible", true)
                     put("enable_error_message", true)
                 })
             })
+        }
+    }
+
+    /**
+     * 与 [io.agora.scene.convoai.ui.living.CovLivingViewModel.buildSalSampleUrls] 同构：
+     * - 个性化声纹：开启且 URL 非空时追加 [uidStr] → PCM URL；
+     * - 预注册：env `SAL_BIOMETRIC_SAMPLE_URLS` JSON 对象，faceId → PCM URL（等价 BiometricSalRegistry）；
+     * - **仅当无任何预注册条目时**才追加两条实验室 PCM。
+     */
+    private fun buildSalSampleUrlsJson(enablePersonalized: Boolean, uidStr: String): JSONObject {
+        val rawBiometric = KeyCenter.SAL_BIOMETRIC_SAMPLE_URLS
+        val biometricJson = try {
+            if (rawBiometric.isNotEmpty()) JSONObject(rawBiometric) else JSONObject()
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val hasBiometricEntries = biometricJson.keys().asSequence().any { k ->
+            k.isNotEmpty() && biometricJson.optString(k, "").isNotEmpty()
+        }
+        val out = JSONObject()
+        if (enablePersonalized) {
+            KeyCenter.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
+        }
+        val keyIt = biometricJson.keys()
+        while (keyIt.hasNext()) {
+            val key = keyIt.next()
+            val v = biometricJson.optString(key, "")
+            if (key.isNotEmpty() && v.isNotEmpty()) out.put(key, v)
+        }
+        if (!hasBiometricEntries) {
+            out.put(SAL_LAB_SPEAKER1_ID, SAL_LAB_PCM_URL_SPEAKER1)
+            out.put(SAL_LAB_SPEAKER2_ID, SAL_LAB_PCM_URL_SPEAKER2)
+        }
+        return out
+    }
+
+    private fun buildAsrJson(): JSONObject = JSONObject().apply {
+        KeyCenter.ASR_LANG.takeIf { it.isNotEmpty() }?.let { put("language", it) }
+        KeyCenter.ASR_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = KeyCenter.ASR_PARAMS
+        if (raw.isNotEmpty()) {
+            try {
+                put("params", JSONObject(raw))
+            } catch (_: Exception) {
+                put("params", raw)
+            }
+        }
+    }
+
+    private fun buildLlmJson(userNameForLabels: Long): JSONObject = JSONObject().apply {
+        KeyCenter.LLM_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        KeyCenter.LLM_URL.takeIf { it.isNotEmpty() }?.let { put("url", it) }
+        KeyCenter.LLM_API_KEY.takeIf { it.isNotEmpty() }?.let { put("api_key", it) }
+        val sysRaw = KeyCenter.LLM_SYSTEM_MESSAGES
+        if (sysRaw.isNotEmpty()) {
+            try {
+                put("system_messages", JSONArray(sysRaw))
+            } catch (_: Exception) {
+                put("system_messages", sysRaw)
+            }
+        }
+        put("greeting_message", JSONObject.NULL)
+        put("params", buildLlmParamsJson(userNameForLabels))
+        put("style", JSONObject.NULL)
+        KeyCenter.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
+            ?: put("max_history", JSONObject.NULL)
+        put("ignore_empty", JSONObject.NULL)
+        put("input_modalities", JSONArray().apply { put("text"); put("image") })
+        put("output_modalities", JSONObject.NULL)
+        put("failure_message", JSONObject.NULL)
+        put("auto_merge", false)
+    }
+
+    private fun buildLlmParamsJson(userNameForLabels: Long): JSONObject = try {
+        val base =
+            if (KeyCenter.LLM_PARRAMS.isNotEmpty()) JSONObject(KeyCenter.LLM_PARRAMS) else JSONObject()
+        base.put(
+            "lables",
+            JSONObject().put("userName", userNameForLabels)
+        )
+    } catch (_: Exception) {
+        JSONObject().put(
+            "lables",
+            JSONObject().put("userName", userNameForLabels)
+        )
+    }
+
+    private fun buildTtsJson(): JSONObject = JSONObject().apply {
+        KeyCenter.TTS_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = KeyCenter.TTS_PARAMS
+        if (raw.isNotEmpty()) {
+            try {
+                put("params", JSONObject(raw))
+            } catch (_: Exception) {
+                put("params", raw)
+            }
         }
     }
 
