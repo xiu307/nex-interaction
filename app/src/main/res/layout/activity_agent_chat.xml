@@ -219,7 +219,6 @@
             android:id="@+id/btnInputVideo"
             android:layout_width="0dp"
             android:layout_height="56dp"
-            android:layout_marginEnd="12dp"
             android:layout_weight="1"
             android:background="@drawable/selector_gradient_button"
             android:letterSpacing="0.02"
@@ -230,23 +229,7 @@
             app:backgroundTint="@null"
             app:cornerRadius="8dp"
             app:elevation="0dp"
-            app:rippleColor="#33FFFFFF" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnPcmCapture"
-            android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_marginEnd="12dp"
-            android:layout_weight="1"
-            android:background="@drawable/selector_gradient_button"
-            android:letterSpacing="0.02"
-            android:text="@string/pcm_capture_start"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="14sp"
-            app:backgroundTint="@null"
-            app:cornerRadius="8dp"
-            app:elevation="0dp"
+            android:layout_marginEnd="8dp"
             app:rippleColor="#33FFFFFF" />
 
         <com.google.android.material.button.MaterialButton

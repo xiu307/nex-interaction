@@ -21,10 +21,10 @@
 ## 集成步骤
 
 1. 将以下文件和文件夹拷贝到你的 Android 项目中：
-   - [subRender/](./subRender/)（v3整个文件夹）
-   - [ConversationalAIAPIImpl.kt](ConversationalAIAPIImpl.kt)
-   - [IConversationalAIAPI.kt](IConversationalAIAPI.kt)
-   - [ConversationalAIUtils.kt](ConversationalAIUtils.kt)
+    - [subRender/](./subRender/)（v3整个文件夹）
+    - [ConversationalAIAPIImpl.kt](ConversationalAIAPIImpl.kt)
+    - [IConversationalAIAPI.kt](IConversationalAIAPI.kt)
+    - [ConversationalAIUtils.kt](ConversationalAIUtils.kt)
 
    > ⚠️ 请保持包名结构（`io.agora.scene.convoai.convoaiApi`）不变，以保证组件正常集成。
 
@@ -71,23 +71,7 @@
    })
    ```
 
-4. **在业务层注册唯一的 AudioFrameObserver**
-
-   `convoaiApi` 不再内部直接调用 `registerAudioFrameObserver()`。
-   业务层需要获取字幕组件所需的 observer，并与自己的音频处理 observer 合并后统一注册一次：
-
-   ```kotlin
-   val transcriptObserver = api.getAudioFrameObserver()
-   val businessObserver = MyBusinessAudioFrameObserver()
-   val combinedObserver = CombinedAudioFrameObserver(listOf(transcriptObserver, businessObserver))
-
-   rtcEngine.registerAudioFrameObserver(combinedObserver)
-   rtcEngine.setRecordingAudioFrameParameters(16000, 1, 0, 3200)
-   ```
-
-   如果业务不需要录制 PCM，也至少需要注册 `api.getAudioFrameObserver()`，以保证字级字幕的时间戳链路正常工作。
-
-5. **订阅频道消息**
+4. **订阅频道消息**
 
    在开始会话前调用：
    ```kotlin
@@ -98,7 +82,7 @@
    }
    ```
 
-6. **（可选）加入 RTC 频道前设置音频参数**
+5. **（可选）加入 RTC 频道前设置音频参数**
 
    ```kotlin
    api.loadAudioSettings()
@@ -113,7 +97,7 @@
    rtcEngine.joinChannel(token, channelName, null, userId)
    ```
 
-7. **（可选）发送消息给 AI agent**
+6. **（可选 发送消息给 AI agent**
 
    **发送文本消息：**
    ```kotlin
@@ -150,13 +134,13 @@
    }
    ```
 
-8. **（可选）打断 agent**
+7. **（可选）打断 agent**
 
    ```kotlin
    api.interrupt("agentId") { error -> /* ... */ }
    ```
 
-9. **销毁 API 实例**
+8. **销毁 API 实例**
 
    ```kotlin
    api.destroy()
@@ -285,23 +269,23 @@ override fun onMessageError(agentUserId: String, error: MessageError) {
   api.loadAudioSettings(Constants.AUDIO_SCENARIO_DEFAULT)
   rtcEngine.joinChannel(token, channelName, null, userId)
   ```
-  
+
   不同场景的音频设置建议：
-  - **数字人模式**：`Constants.AUDIO_SCENARIO_DEFAULT` - 提供更好的音频混音效果
-  - **标准模式**：`Constants.AUDIO_SCENARIO_AI_CLIENT` - 适用于标准AI对话场景
+    - **数字人模式**：`Constants.AUDIO_SCENARIO_DEFAULT` - 提供更好的音频混音效果
+    - **标准模式**：`Constants.AUDIO_SCENARIO_AI_CLIENT` - 适用于标准AI对话场景
 
 - **所有事件回调均在主线程执行。**
   可直接在回调中安全更新 UI。
 
 - **消息发送状态确认：**
-  - `chat` 接口的 completion 回调仅表示发送请求是否成功，不代表消息实际处理状态
-  - 图片消息的实际发送成功通过 `onMessageReceiptUpdated` 回调确认
-  - 图片消息的发送失败通过 `onMessageError` 回调确认
-  - 推荐使用 `sou` 字段进行快速判断，性能更好
+    - `chat` 接口的 completion 回调仅表示发送请求是否成功，不代表消息实际处理状态
+    - 图片消息的实际发送成功通过 `onMessageReceiptUpdated` 回调确认
+    - 图片消息的发送失败通过 `onMessageError` 回调确认
+    - 推荐使用 `sou` 字段进行快速判断，性能更好
 
 - **图片消息状态跟踪：**
-  - 直接检查 `chatMessageType == ChatMessageType.Image`
-  - 通过解析 JSON 中的 `uuid` 字段确认具体图片的发送状态
+    - 直接检查 `chatMessageType == ChatMessageType.Image`
+    - 通过解析 JSON 中的 `uuid` 字段确认具体图片的发送状态
 
 ---
 

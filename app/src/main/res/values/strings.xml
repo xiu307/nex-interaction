@@ -2,6 +2,4 @@
     <string name="app_name">QuickStart Kotlin</string>
     <string name="video_input_start">Input Video</string>
     <string name="video_input_stop">Stop Video</string>
-    <string name="pcm_capture_start">Save PCM</string>
-    <string name="pcm_capture_stop">Stop PCM</string>
 </resources>

@@ -6,9 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.shengwang.convoai.quickstart.AgentApp
 import cn.shengwang.convoai.quickstart.KeyCenter
-import cn.shengwang.convoai.quickstart.audio.CombinedAudioFrameObserver
-import cn.shengwang.convoai.quickstart.audio.PcmFileRecorder
-import cn.shengwang.convoai.quickstart.audio.PcmRecordAudioFrameObserver
 import cn.shengwang.convoai.quickstart.api.AgentStarter
 import cn.shengwang.convoai.quickstart.api.TokenGenerator
 import cn.shengwang.convoai.quickstart.video.ExternalVideoCaptureManager
@@ -42,11 +39,8 @@ import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConfig
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
@@ -121,16 +115,8 @@ class AgentChatViewModel : ViewModel() {
         val connectionState: ConnectionState = ConnectionState.Idle
     )
 
-    data class PcmCaptureUiState(
-        val isSaving: Boolean = false,
-        val fileName: String? = null
-    )
-
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
-
-    private val _pcmCaptureState = MutableStateFlow(PcmCaptureUiState())
-    val pcmCaptureState: StateFlow<PcmCaptureUiState> = _pcmCaptureState.asStateFlow()
 
     // Transcript list - separate from UI state
     private val _transcriptList = MutableStateFlow<List<Transcript>>(emptyList())
@@ -156,16 +142,6 @@ class AgentChatViewModel : ViewModel() {
     private var agentId: String? = null
     // Auth token for REST API (app-credentials mode)
     private var authToken: String? = null
-    private val pcmFileRecorder = PcmFileRecorder(AgentApp.instance())
-    private val pcmRecordAudioFrameObserver = PcmRecordAudioFrameObserver { audioData ->
-        pcmFileRecorder.append(audioData).onFailure { exception ->
-            viewModelScope.launch {
-                stopPcmCaptureInternal(logSavedResult = false)
-                addStatusLog("PCM save failed: ${exception.message}")
-            }
-        }
-    }
-    private var audioFrameObserverRegistered = false
     private var externalVideoCaptureManager: ExternalVideoCaptureManager? = null
     private var customVideoTrackPublished = false
 
@@ -335,7 +311,6 @@ class AgentChatViewModel : ViewModel() {
                     enableLog = true
                 )
             )
-            registerBusinessAudioFrameObserver()
             conversationalAIAPI?.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
             conversationalAIAPI?.addHandler(conversationalAIAPIEventHandler)
             Log.d(TAG, "RTC engine and RTM client created successfully")
@@ -748,7 +723,6 @@ class AgentChatViewModel : ViewModel() {
     fun hangup() {
         viewModelScope.launch {
             try {
-                stopPcmCaptureInternal()
                 conversationalAIAPI?.unsubscribeMessage(channelName) { errorInfo ->
                     if (errorInfo != null) {
                         Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
@@ -791,7 +765,6 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        stopPcmCaptureInternal()
         leaveRtcChannel()
         logoutRtm()
         conversationalAIAPI?.removeHandler(conversationalAIAPIEventHandler)
@@ -813,102 +786,6 @@ class AgentChatViewModel : ViewModel() {
         externalVideoCaptureManager = null
         rtcEngine = null
         rtmClient = null
-    }
-
-    private fun registerBusinessAudioFrameObserver() {
-        if (audioFrameObserverRegistered) {
-            return
-        }
-        val transcriptAudioFrameObserver = conversationalAIAPI?.getAudioFrameObserver() ?: return
-        val observer = CombinedAudioFrameObserver(
-            listOf(transcriptAudioFrameObserver, pcmRecordAudioFrameObserver)
-        )
-        val registerResult = rtcEngine?.registerAudioFrameObserver(observer)
-        if (registerResult == ERR_OK) {
-            val recordResult = rtcEngine?.setRecordingAudioFrameParameters(
-                PcmRecordAudioFrameObserver.SAMPLE_RATE,
-                PcmRecordAudioFrameObserver.CHANNELS,
-                PcmRecordAudioFrameObserver.MODE,
-                PcmRecordAudioFrameObserver.SAMPLES_PER_CALL
-            )
-            audioFrameObserverRegistered = true
-            addStatusLog("AudioFrameObserver registered successfully")
-            if (recordResult != ERR_OK) {
-                addStatusLog("Recording audio frame params failed ret: $recordResult")
-            }
-        } else {
-            addStatusLog("AudioFrameObserver register failed ret: $registerResult")
-        }
-    }
-
-    /**
-     * 切换 PCM 原始音频保存状态。
-     *
-     * 当前未保存时会启动 PCM 采集并落盘；如果已经在保存，则停止采集并
-     * 关闭当前文件。该能力仅在 Agent 已连接后可用。
-     */
-    fun togglePcmCapture() {
-        if (_pcmCaptureState.value.isSaving) {
-            stopPcmCaptureInternal()
-        } else {
-            startPcmCaptureInternal()
-        }
-    }
-
-    private fun startPcmCaptureInternal() {
-        if (_uiState.value.connectionState != ConnectionState.Connected) {
-            addStatusLog("PCM capture is only available after agent connected")
-            return
-        }
-        pcmFileRecorder.start().fold(
-            onSuccess = { file ->
-                _pcmCaptureState.value = PcmCaptureUiState(
-                    isSaving = true,
-                    fileName = file.name
-                )
-                addStatusLog("PCM saving started: ${file.name}")
-            },
-            onFailure = { exception ->
-                addStatusLog("PCM saving start failed: ${exception.message}")
-            }
-        )
-    }
-
-    private fun stopPcmCaptureInternal(logSavedResult: Boolean = true) {
-        val wasSaving = _pcmCaptureState.value.isSaving || pcmFileRecorder.isSaving()
-        if (!wasSaving) {
-            return
-        }
-        val currentFileName = _pcmCaptureState.value.fileName
-        pcmFileRecorder.stop().fold(
-            onSuccess = { file ->
-                _pcmCaptureState.value = PcmCaptureUiState()
-                if (logSavedResult) {
-                    val savedPath = file?.absolutePath
-                    if (savedPath != null) {
-                        addStatusLog("PCM saved: $savedPath")
-                    } else if (currentFileName != null) {
-                        addStatusLog("PCM saving stopped: $currentFileName")
-                    }
-                }
-            },
-            onFailure = { exception ->
-                _pcmCaptureState.value = PcmCaptureUiState()
-                addStatusLog("PCM saving stop failed: ${exception.message}")
-            }
-        )
-    }
-
-    /**
-     * 注册业务侧 PCM 数据回调。
-     *
-     * 回调数据来自当前录制音频帧观察器，适合用于原始音频保存、转发
-     * 或接入自定义音频分析逻辑；传入 `null` 可取消监听。
-     *
-     * @param listener PCM 数据监听器，参数为每次回调的原始字节数组
-     */
-    fun setOnPcmDataListener(listener: ((ByteArray) -> Unit)?) {
-        pcmRecordAudioFrameObserver.setOnPcmDataListener(listener)
     }
 
     /**

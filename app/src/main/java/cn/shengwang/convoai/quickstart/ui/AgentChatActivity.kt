@@ -57,7 +57,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         cameraVideoInputManager = CameraVideoInputManager(this) { frame ->
             viewModel.pushExternalVideoFrame(frame)
         }
-        registerPcmDataListener()
 
         // Observe UI state changes
         observeUiState()
@@ -67,25 +66,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
         // Observe debug log changes
         observeDebugLogs()
-
-        // Observe PCM capture state
-        observePcmCaptureState()
-    }
-
-    private fun registerPcmDataListener() {
-        // TODO: Register Activity-level PCM callback here when raw PCM data needs to be consumed by UI
-        // or forwarded to other business modules.
-        // If customer video comes from an external camera/device, feed frames through:
-        // viewModel.setExternalVideoPublishingEnabled(true)
-        // viewModel.pushExternalVideoFrame(frame)
-        // or:
-        // viewModel.setExternalVideoPublishingEnabled(true)
-        // viewModel.pushExternalNv21Frame(data, width, height, rotation)
-        //
-        // Example:
-        // viewModel.setOnPcmDataListener { data ->
-        //     // Handle raw PCM bytes.
-        // }
     }
 
     private fun toggleVideoInput() {
@@ -203,10 +183,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
             btnInputVideo.setOnClickListener {
                 toggleVideoInput()
-            }
-
-            btnPcmCapture.setOnClickListener {
-                viewModel.togglePcmCapture()
             }
 
             // Stop button click listener
@@ -414,29 +390,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 }
             }
         }
-    }
-
-    private fun observePcmCaptureState() {
-        lifecycleScope.launch {
-            viewModel.pcmCaptureState.collect { pcmState ->
-                mBinding?.btnPcmCapture?.apply {
-                    text = if (pcmState.isSaving) {
-                        context.getString(R.string.pcm_capture_stop)
-                    } else {
-                        context.getString(R.string.pcm_capture_start)
-                    }
-                    setBackgroundResource(
-                        if (pcmState.isSaving) {
-                            R.drawable.selector_button_hangup
-                        } else {
-                            R.drawable.selector_gradient_button
-                        }
-                    )
-                    setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
-                }
-            }
-        }
-
     }
 
     private fun observeDebugLogs() {
