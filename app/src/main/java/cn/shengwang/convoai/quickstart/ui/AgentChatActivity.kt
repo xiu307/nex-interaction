@@ -1,5 +1,6 @@
 package cn.shengwang.convoai.quickstart.ui
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -150,6 +151,25 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
     }
 
+    private fun updateAudioInputButton(enabled: Boolean) {
+        mBinding?.btnInputAudio?.apply {
+            text = if (enabled) {
+                context.getString(R.string.audio_input_stop)
+            } else {
+                context.getString(R.string.audio_input_start)
+            }
+            setBackgroundResource(
+                if (enabled) {
+                    R.drawable.selector_button_hangup
+                } else {
+                    R.drawable.selector_gradient_button
+                }
+            )
+            setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     override fun initView() {
         mBinding?.apply {
             setOnApplyWindowInsetsListener(root)
@@ -183,6 +203,10 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
             btnInputVideo.setOnClickListener {
                 toggleVideoInput()
+            }
+
+            btnInputAudio.setOnClickListener {
+                viewModel.toggleAudioInput()
             }
 
             // Stop button click listener
@@ -300,10 +324,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     // Show/hide buttons
                     llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
                     llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
+                    btnInputAudio.isEnabled = isConnected
                     btnInputVideo.isEnabled = isConnected || isVideoInputStarted
                     if (!isConnected && isVideoInputStarted) {
                         stopVideoInput()
                     }
+                    updateAudioInputButton(state.isAudioInputEnabled)
 
                     // Update button style based on connection state
                     val isError = state.connectionState == AgentChatViewModel.ConnectionState.Error

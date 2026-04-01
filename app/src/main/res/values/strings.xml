@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">QuickStart Kotlin</string>
+    <string name="audio_input_start">Input Audio</string>
+    <string name="audio_input_stop">Stop Audio</string>
     <string name="video_input_start">Input Video</string>
     <string name="video_input_stop">Stop Video</string>
 </resources>

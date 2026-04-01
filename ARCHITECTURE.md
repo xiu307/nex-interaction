@@ -8,6 +8,7 @@ Current scope:
 
 - Start Agent
 - RTC join + RTM login
+- audio self-capture auto-start after agent connection
 - Real-time transcript rendering
 - Agent status rendering
 - Mute / unmute
@@ -27,7 +28,7 @@ The Activity page is intentionally single-page and is organized into these regio
 - log panel
 - transcript panel
 - bottom agent status bar
-- start / retry / mute / stop controls
+- start / retry / mute / audio input stop-resume / stop controls
 
 ## Project Structure
 
@@ -62,6 +63,7 @@ Tap Start Agent
   → subscribe RTM channel
   → generate agentToken + authToken
   → POST /join/ with inline ASR / LLM / TTS config
+  → auto-start default microphone audio capture
   → save agentId
   → uiState = Connected
 ```
@@ -91,7 +93,7 @@ The current UI renders:
 ## UI State Rendering
 
 ```text
-uiState        → Start / Connecting / Retry / Mute / Stop buttons
+uiState        → Start / Connecting / Retry / Mute / Audio Input / Stop buttons
 agentState     → bottom status bar color + text
 transcriptList → transcript panel content
 debugLogList   → log panel content

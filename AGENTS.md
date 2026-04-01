@@ -29,7 +29,7 @@ Conversational AI Quickstart — Android real-time voice conversation client.
 
 The client directly calls ShengWang RESTful API to start/stop Agent, with STT (Speech-to-Text), LLM (Large Language Model), and TTS (Text-to-Speech) configuration in the request body, authenticated via HTTP token (`Authorization: agora token=<token>`). This auth mode requires APP_CERTIFICATE to be enabled.
 
-Current quickstart scope is limited to voice session startup, transcript display, state rendering, mute, and stop. It does not expose text or image message sending UI.
+Current quickstart scope is limited to voice session startup, default audio self-capture startup, transcript display, state rendering, mute, audio input stop/resume, and stop. It does not expose text or image message sending UI.
 
 ## Tech Stack
 
@@ -56,11 +56,11 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - Manages RTC Engine and RTM Client lifecycle
 - Subscribes to RTM messages via ConversationalAIAPI, parses Agent state and transcripts
 - Exposes four StateFlows:
-  - `uiState: StateFlow<ConversationUiState>` — connection state (Idle/Connecting/Connected/Error) + mute
+  - `uiState: StateFlow<ConversationUiState>` — connection state (Idle/Connecting/Connected/Error) + mute + audio input enabled state
   - `agentState: StateFlow<AgentState>` — Agent state (IDLE/SILENT/LISTENING/THINKING/SPEAKING)
   - `transcriptList: StateFlow<List<Transcript>>` — transcript list (deduplicated/updated by turnId + type)
   - `debugLogList: StateFlow<List<String>>` — debug logs (max 20 entries)
-- Auto flow: joinRTC + loginRTM → both ready → generateToken → startAgent
+- Auto flow: joinRTC + loginRTM → both ready → generateToken → startAgent → auto-start default microphone audio capture
 - `userId` / `agentUid` are randomly generated in the companion object, and `channelName` format is `channel_kotlin_<6-digit-random>`
 
 ### AgentStarter
@@ -219,8 +219,9 @@ User Action → ViewModel → ShengWang SDK (RTC/RTM)
 3. Parallel: join RTC channel + login RTM (both use the same userToken)
 4. Both ready → subscribeMessage(channelName) → generate agentToken + authToken (uid=agentUid, channelName=current channel)
 5. Call `AgentStarter.startAgentAsync(channelName, agentRtcUid, agentToken, authToken, remoteRtcUid)` to start Agent, where `remoteRtcUid` is the current user RTC UID
-6. ConversationalAIAPI receives Agent events via RTM → update StateFlow → UI responds
-7. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
+6. Agent starts successfully → default microphone audio capture starts automatically
+7. ConversationalAIAPI receives Agent events via RTM → update StateFlow → UI responds
+8. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
 
 ## How to Change Request Parameters
 

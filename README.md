@@ -119,15 +119,18 @@ cd conversational-ai-quickstart-native/android-kotlin
      - 生成随机 channelName（格式：`channel_kotlin_<6-digit-random>`）
      - 加入 RTC 频道并登录 RTM
      - 连接成功后自动启动 AI Agent
+     - Agent 启动成功后默认开启音频自采集
    - 如果启动失败，按钮变为"Retry"
    - Agent 启动成功后：
      - "Start Agent"按钮隐藏
-     - 显示麦克风按钮（圆形）和"Stop Agent"按钮
+     - 显示麦克风按钮（圆形）、音频输入按钮和"Stop Agent"按钮
+     - 音频输入按钮默认显示"Stop Audio"，可手动停止或重新恢复默认麦克风自采集
      - 可以开始与 AI Agent 对话
 
 3. **对话交互**：
    - 实时显示聊天气泡形式的转录内容
    - 麦克风按钮支持静音/取消静音
+   - 音频输入按钮支持停止/恢复默认音频自采集
    - 点击"Stop Agent"按钮结束对话并断开连接
 
 ### 功能验证清单
@@ -135,10 +138,12 @@ cd conversational-ai-quickstart-native/android-kotlin
 - ✅ RTC 频道加入成功
 - ✅ RTM 登录成功
 - ✅ Agent 启动成功（按钮状态变化，显示麦克风和停止按钮）
+- ✅ Agent 连接成功后默认开启音频自采集
 - ✅ 音频传输正常（能够听到 AI 回复）
 - ✅ 转录功能正常（聊天气泡形式显示对话内容）
 - ✅ Agent 状态指示正常
 - ✅ 静音/取消静音功能正常
+- ✅ 音频输入停止/恢复功能正常
 - ✅ 停止功能正常（断开连接，按钮恢复为 Start Agent）
 - ✅ 错误处理正常（失败时可重试）
 

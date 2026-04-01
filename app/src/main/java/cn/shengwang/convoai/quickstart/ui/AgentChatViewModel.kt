@@ -1,11 +1,14 @@
 package cn.shengwang.convoai.quickstart.ui
 
+import android.Manifest
 import android.content.Context
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.shengwang.convoai.quickstart.AgentApp
 import cn.shengwang.convoai.quickstart.KeyCenter
+import cn.shengwang.convoai.quickstart.audio.CustomAudioInputManager
 import cn.shengwang.convoai.quickstart.api.AgentStarter
 import cn.shengwang.convoai.quickstart.api.TokenGenerator
 import cn.shengwang.convoai.quickstart.video.ExternalVideoCaptureManager
@@ -111,6 +114,7 @@ class AgentChatViewModel : ViewModel() {
     // UI State - shared between AgentHomeFragment and VoiceAssistantFragment
     data class ConversationUiState constructor(
         val isMuted: Boolean = false,
+        val isAudioInputEnabled: Boolean = false,
         // Connection state
         val connectionState: ConnectionState = ConnectionState.Idle
     )
@@ -142,6 +146,7 @@ class AgentChatViewModel : ViewModel() {
     private var agentId: String? = null
     // Auth token for REST API (app-credentials mode)
     private var authToken: String? = null
+    private var audioInputManager: CustomAudioInputManager? = null
     private var externalVideoCaptureManager: ExternalVideoCaptureManager? = null
     private var customVideoTrackPublished = false
 
@@ -154,6 +159,7 @@ class AgentChatViewModel : ViewModel() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             viewModelScope.launch {
                 rtcJoined = true
+                audioInputManager?.setPublished(true)
                 externalVideoCaptureManager?.setFramePushEnabled(customVideoTrackPublished)
                 addStatusLog("Rtc onJoinChannelSuccess, channel:${channel} uid:$uid")
                 Log.d(TAG, "RTC joined channel: $channel, uid: $uid")
@@ -164,6 +170,7 @@ class AgentChatViewModel : ViewModel() {
         override fun onLeaveChannel(stats: RtcStats?) {
             super.onLeaveChannel(stats)
             viewModelScope.launch {
+                stopExternalAudioCapture()
                 customVideoTrackPublished = false
                 externalVideoCaptureManager?.setFramePushEnabled(false)
                 addStatusLog("Rtc onLeaveChannel")
@@ -194,6 +201,7 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onError(err: Int) {
             viewModelScope.launch {
+                stopExternalAudioCapture()
                 customVideoTrackPublished = false
                 externalVideoCaptureManager?.setFramePushEnabled(false)
                 _uiState.value = _uiState.value.copy(
@@ -342,6 +350,13 @@ class AgentChatViewModel : ViewModel() {
                 loadExtensionProvider("ai_echo_cancellation_extension")
                 loadExtensionProvider("ai_noise_suppression_extension")
             }
+            audioInputManager = CustomAudioInputManager(
+                rtcEngine = rtcEngine!!,
+                onAudioInputInterrupted = {
+                    _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
+                    addStatusLog("Audio input stopped unexpectedly")
+                }
+            )
             externalVideoCaptureManager = ExternalVideoCaptureManager(rtcEngine!!)
             Log.d(TAG, "initRtcEngine success")
             Log.d(TAG, "current sdk version: ${RtcEngine.getSdkVersion()}")
@@ -353,12 +368,18 @@ class AgentChatViewModel : ViewModel() {
     }
 
     private fun buildChannelMediaOptions(
+        customAudioTrackId: Int? = null,
         publishCustomVideoTrack: Boolean,
         customTrackId: Int? = null
     ): ChannelMediaOptions {
         return ChannelMediaOptions().apply {
             clientRoleType = CLIENT_ROLE_BROADCASTER
-            publishMicrophoneTrack = true
+            // AUDIO_TRACK_DIRECT replaces the microphone track.
+            publishMicrophoneTrack = false
+            publishCustomAudioTrack = true
+            if (customAudioTrackId != null && customAudioTrackId >= 0) {
+                publishCustomAudioTrackId = customAudioTrackId
+            }
             publishCameraTrack = false
             this.publishCustomVideoTrack = publishCustomVideoTrack
             if (customTrackId != null && customTrackId >= 0) {
@@ -475,11 +496,25 @@ class AgentChatViewModel : ViewModel() {
     /**
      * Join RTC channel
      */
-    private fun joinRtcChannel(rtcToken: String, channelName: String, uid: Int) {
+    private fun joinRtcChannel(rtcToken: String, channelName: String, uid: Int): Boolean {
         Log.d(TAG, "joinChannel channelName: $channelName, localUid: $uid")
-        // join rtc channel
+        val audioManager = audioInputManager
+        if (audioManager == null) {
+            addStatusLog("External audio manager is not initialized")
+            _uiState.value = _uiState.value.copy(connectionState = ConnectionState.Error)
+            return false
+        }
+
+        val customAudioTrackId = audioManager.ensureCustomAudioTrack()
+        if (customAudioTrackId < 0) {
+            addStatusLog("Create custom audio track failed ret: $customAudioTrackId")
+            _uiState.value = _uiState.value.copy(connectionState = ConnectionState.Error)
+            return false
+        }
+
         customVideoTrackPublished = false
         val channelOptions = buildChannelMediaOptions(
+            customAudioTrackId = customAudioTrackId,
             publishCustomVideoTrack = false
         )
         externalVideoCaptureManager?.setFramePushEnabled(false)
@@ -487,9 +522,13 @@ class AgentChatViewModel : ViewModel() {
         Log.d(TAG, "Joining RTC channel: $channelName, uid: $uid")
         if (ret == ERR_OK) {
             Log.d(TAG, "Join RTC room success")
+            return true
         } else {
+            stopExternalAudioCapture()
             Log.e(TAG, "Join RTC room failed, ret: $ret")
             addStatusLog("Rtc joinChannel failed ret: $ret")
+            _uiState.value = _uiState.value.copy(connectionState = ConnectionState.Error)
+            return false
         }
     }
 
@@ -581,6 +620,9 @@ class AgentChatViewModel : ViewModel() {
             startAgentResult.fold(
                 onSuccess = { agentId ->
                     this@AgentChatViewModel.agentId = agentId
+                    if (!startAudioInputInternal()) {
+                        addStatusLog("Enable audio input failed")
+                    }
                     _uiState.value = _uiState.value.copy(
                         connectionState = ConnectionState.Connected
                     )
@@ -631,6 +673,7 @@ class AgentChatViewModel : ViewModel() {
      * Join RTC channel and login RTM
      * @param channelName Channel name to join
      */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun joinChannelAndLogin(channelName: String) {
         viewModelScope.launch {
             this@AgentChatViewModel.channelName = channelName
@@ -645,7 +688,9 @@ class AgentChatViewModel : ViewModel() {
             val token = unifiedToken ?: generateUserToken() ?: return@launch
 
             // Join RTC channel with the unified token
-            joinRtcChannel(token, channelName, userId)
+            if (!joinRtcChannel(token, channelName, userId)) {
+                return@launch
+            }
 
             // Login RTM with the same unified token
             loginRtm(token) { exception ->
@@ -659,6 +704,9 @@ class AgentChatViewModel : ViewModel() {
                         }
                         checkJoinAndLoginComplete()
                     } else {
+                        stopExternalAudioCapture()
+                        leaveRtcChannel()
+                        rtcJoined = false
                         _uiState.value = _uiState.value.copy(
                             connectionState = ConnectionState.Error
                         )
@@ -680,6 +728,35 @@ class AgentChatViewModel : ViewModel() {
         )
         muteLocalAudio(newMuteState)
         Log.d(TAG, "Microphone muted: $newMuteState")
+    }
+
+    fun startAudioInput(): Boolean {
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            addStatusLog("Audio input is only available after agent connected")
+            return false
+        }
+        val started = startAudioInputInternal()
+        if (!started) {
+            addStatusLog("Enable audio input failed")
+        }
+        return started
+    }
+
+    fun stopAudioInput(): Boolean {
+        if (!_uiState.value.isAudioInputEnabled) {
+            return true
+        }
+        stopAudioInputInternal()
+        return true
+    }
+
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    fun toggleAudioInput(): Boolean {
+        return if (_uiState.value.isAudioInputEnabled) {
+            stopAudioInput()
+        } else {
+            startAudioInput()
+        }
     }
 
     /**
@@ -723,6 +800,7 @@ class AgentChatViewModel : ViewModel() {
     fun hangup() {
         viewModelScope.launch {
             try {
+                stopExternalAudioCapture()
                 conversationalAIAPI?.unsubscribeMessage(channelName) { errorInfo ->
                     if (errorInfo != null) {
                         Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
@@ -752,6 +830,7 @@ class AgentChatViewModel : ViewModel() {
                 customVideoTrackPublished = false
                 authToken = null
                 _uiState.value = _uiState.value.copy(
+                    isAudioInputEnabled = false,
                     connectionState = ConnectionState.Idle
                 )
                 _transcriptList.value = emptyList()
@@ -765,6 +844,7 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        stopExternalAudioCapture()
         leaveRtcChannel()
         logoutRtm()
         conversationalAIAPI?.removeHandler(conversationalAIAPIEventHandler)
@@ -782,10 +862,33 @@ class AgentChatViewModel : ViewModel() {
 
         // Note: RtcEngine.destroy() should be called carefully as it's a global operation
         // Consider managing RTC engine lifecycle at Application level
+        audioInputManager?.release()
+        audioInputManager = null
         externalVideoCaptureManager?.release()
         externalVideoCaptureManager = null
         rtcEngine = null
         rtmClient = null
+    }
+
+    private fun startAudioInputInternal(): Boolean {
+        val audioManager = audioInputManager ?: return false
+        if (!audioManager.start()) {
+            _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
+            return false
+        }
+        rtcEngine?.adjustRecordingSignalVolume(if (_uiState.value.isMuted) 0 else 100)
+        _uiState.value = _uiState.value.copy(isAudioInputEnabled = true)
+        return true
+    }
+
+    private fun stopAudioInputInternal() {
+        audioInputManager?.stop()
+        _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
+    }
+
+    private fun stopExternalAudioCapture() {
+        audioInputManager?.stopAndUnpublish()
+        _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
     }
 
     /**
@@ -828,6 +931,8 @@ class AgentChatViewModel : ViewModel() {
 
         val result = rtcEngine?.updateChannelMediaOptions(
             buildChannelMediaOptions(
+                customAudioTrackId = audioInputManager?.getCustomAudioTrackId()
+                    ?.takeIf { it >= 0 },
                 publishCustomVideoTrack = enabled,
                 customTrackId = customTrackId.takeIf { it >= 0 }
             )
@@ -867,6 +972,23 @@ class AgentChatViewModel : ViewModel() {
      */
     fun pushExternalVideoFrame(frame: AgoraVideoFrame): Int {
         return externalVideoCaptureManager?.pushExternalVideoFrame(frame) ?: -1
+    }
+
+    /**
+     * 推送一帧业务侧原始 PCM 数据到 RTC 自定义音频轨。
+     *
+     * 适用于业务侧接入外部麦克风、采集卡或其他音频设备时，直接把已采集
+     * 的 16k/单声道/16bit PCM 数据送入 RTC。
+     *
+     * @param data 原始 PCM 字节数组
+     * @param timestampMs 音频帧时间戳，单位毫秒
+     * @return SDK 推帧结果，`0` 表示成功，负数表示失败
+     */
+    fun pushExternalPcmAudioFrame(
+        data: ByteArray,
+        timestampMs: Long = System.currentTimeMillis()
+    ): Int {
+        return audioInputManager?.pushExternalPcmData(data, timestampMs) ?: -1
     }
 
     /**
