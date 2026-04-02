@@ -21,7 +21,7 @@ import org.json.JSONObject
  */
 object AgentStarter {
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
-    private const val API_BASE_URL = "https://api.sd-rtn.com/cn/api/conversational-ai-agent/v2/projects"
+    private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     /** 实验室预置声纹（SAL sample_urls 键与 PCM URL） */
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
@@ -50,7 +50,7 @@ object AgentStarter {
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val projectId = KeyCenter.APP_ID
-            val url = "$API_BASE_URL/$projectId/join/"
+            val url = "$API_BASE_URL/$projectId/join"
 
             val requestBody = buildJsonPayload(
                 name = channelName,
@@ -129,6 +129,10 @@ object AgentStarter {
                         "sample_urls",
                         buildSalSampleUrlsJson(KeyCenter.SAL_ENABLE_PERSONALIZED, agentRtcUid)
                     )
+                })
+
+                put("turn_detection", JSONObject().apply {
+                    put("interrupt_mode", "adaptive")
                 })
 
                 put("parameters", JSONObject().apply {
