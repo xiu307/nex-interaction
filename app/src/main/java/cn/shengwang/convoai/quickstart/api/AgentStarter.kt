@@ -101,6 +101,7 @@ object AgentStarter {
         remoteRtcUids: List<String>
     ): JSONObject {
         return JSONObject().apply {
+            val deviceId = remoteRtcUids.first().toLongOrNull() ?: 0L
             put("name", name)
             put("properties", JSONObject().apply {
                 put("channel", channel)
@@ -119,7 +120,7 @@ object AgentStarter {
 
                 put("asr", buildAsrJson())
 
-                put("llm", buildLlmJson(agentRtcUid.toLongOrNull() ?: 0L))
+                put("llm", buildLlmJson(deviceId))
 
                 put("tts", buildTtsJson())
 
@@ -127,7 +128,7 @@ object AgentStarter {
                     put("sal_mode", "recognition")
                     put(
                         "sample_urls",
-                        buildSalSampleUrlsJson(KeyCenter.SAL_ENABLE_PERSONALIZED, agentRtcUid)
+                        buildSalSampleUrlsJson(KeyCenter.SAL_ENABLE_PERSONALIZED, deviceId.toString())
                     )
                 })
 
