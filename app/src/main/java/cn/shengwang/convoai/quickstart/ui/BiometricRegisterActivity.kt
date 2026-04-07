@@ -131,6 +131,10 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     @Volatile
     private var enrollInProgress = false
 
+    /** [prepareFaceDetectorLikeDemoOnCreate] 中 prepareEngine 成功后才为 true，用于控制人脸按钮可点 */
+    @Volatile
+    private var faceEnginePreparedOk = false
+
     private var faceDetector: FaceDetector? = null
 
     override fun getViewBinding(): ActivityBiometricRegisterBinding {
@@ -167,6 +171,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     override fun onDestroy() {
         stopPcmRecordingSync()
+        faceEnginePreparedOk = false
         runCatching { faceDetector?.unbindCamera() }
         runCatching { PhotoFaceEnrollment.releaseLandmarker() }
         runCatching { faceDetector?.release() }
@@ -338,6 +343,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     private fun prepareFaceDetectorLikeDemoOnCreate() {
         mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_init_library)
+        faceEnginePreparedOk = false
         runCatching {
             initFaceDetectorIfNeeded()
             faceDetector!!.prepareEngine(applicationContext)
@@ -350,6 +356,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             refreshFaceButtonsEnabled()
             return
         }
+        faceEnginePreparedOk = true
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = false)
     }
 
@@ -385,6 +392,16 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         faceDetector = fd
     }
 
+    private fun toastRecognitionNotReady(fd: FaceDetector) {
+        val why = fd.getLastRecognitionInitFailureMessage()?.trim().orEmpty()
+        val msg = if (why.isNotEmpty()) {
+            getString(R.string.biometric_recognition_detail, why)
+        } else {
+            getString(R.string.biometric_recognition_not_ready)
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
     private fun launchFaceFromGallery() {
         if (enrollInProgress) return
         val fd = faceDetector ?: run {
@@ -392,7 +409,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             return
         }
         if (fd.multiPersonRecognitionManager == null) {
-            Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
+            toastRecognitionNotReady(fd)
             return
         }
         enrollInProgress = true
@@ -408,7 +425,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             return
         }
         if (fd.multiPersonRecognitionManager == null) {
-            Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
+            toastRecognitionNotReady(fd)
             return
         }
         val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
@@ -522,16 +539,21 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         )
     }
 
+    /**
+     * 相册/录制按钮不可依赖「识别库已就绪」才 enabled：否则 ArcFace/Room 初始化失败时按钮永远灰色、点击无任何反馈。
+     * 识别未就绪时仍允许点击，由 [launchFaceFromGallery] / [launchFaceRecordVideo] 内 Toast 说明原因。
+     */
     private fun refreshFaceButtonsEnabled() {
         val m = mBinding ?: return
-        val mgrReady = faceDetector?.multiPersonRecognitionManager != null
-        val base = !enrollInProgress && mgrReady
+        val engineReady = faceEnginePreparedOk && !enrollInProgress
         val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-        m.btnFaceFromGallery.isEnabled = base
-        m.btnFaceRecord.isEnabled = base && camOk && micOk
+        // 相册选视频仅需 SAF，不要求相机/麦克风权限
+        m.btnFaceFromGallery.isEnabled = engineReady
+        // 系统录像需要相机+麦克风
+        m.btnFaceRecord.isEnabled = engineReady && camOk && micOk
     }
 
     private fun uploadFaceBitmapForFaceId(faceKey: String, bitmap: Bitmap) {

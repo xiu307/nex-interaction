@@ -156,6 +156,17 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // facedet 运行时从 assets 加载 models/arcface.tflite 与 .task；若 AAR 未带齐资源，可从本仓库 sibling 的
+    // face-detc-java 在运行 :facedet:downloadFacedetModels（并放置 vendor/arcface.tflite）后生成的目录合并进 APK。
+    sourceSets {
+        getByName("main") {
+            val facedetGeneratedAssets = rootProject.file("../face-detc-java/facedet/build/generated/facedetAssets/assets")
+            if (facedetGeneratedAssets.isDirectory) {
+                assets.srcDirs(facedetGeneratedAssets)
+            }
+        }
+    }
 }
 
 dependencies {
