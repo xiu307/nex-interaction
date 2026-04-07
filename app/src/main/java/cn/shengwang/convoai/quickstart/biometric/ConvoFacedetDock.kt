@@ -27,6 +27,9 @@ object ConvoFacedetDock {
         return FaceDetectorConfig().apply {
             deviceId = "sdk_demo"
             applyMainActivityDemoPipelineFields(this)
+            // 注册页仅需人脸：关 Pose，且强制 MediaPipe CPU（华为等机型 GPU 下 FaceLandmarker 可能 SIGSEGV）
+            posePipelineEnabled = false
+            mediapipeForceCpuDelegate = true
             enrollmentSimilarityThreshold = 0.78f
         }
     }
