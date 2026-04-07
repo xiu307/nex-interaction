@@ -13,10 +13,12 @@ import io.agora.convoai.convoaiApi.ConversationalAIAPI_VERSION
 import io.agora.convoai.convoaiApi.ConversationalAIUtils
 import io.agora.convoai.convoaiApi.InterruptEvent
 import io.agora.convoai.convoaiApi.MessageType
+import io.agora.convoai.convoaiApi.SpeakerConfidence
 import io.agora.convoai.convoaiApi.Transcript
 import io.agora.convoai.convoaiApi.TranscriptRenderMode
 import io.agora.convoai.convoaiApi.TranscriptStatus
 import io.agora.convoai.convoaiApi.TranscriptType
+import io.agora.convoai.convoaiApi.VpidsInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
 import java.nio.ByteBuffer
@@ -377,15 +379,44 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
         }
     }
 
+    private fun anyMapToStringKeyMap(any: Any?): Map<String, Any>? {
+        return when (any) {
+            is Map<*, *> -> any.entries.associate { (k, v) -> k.toString() to (v as Any) }
+            else -> null
+        }
+    }
+
+    private fun parseVpidsFromUserMessage(msg: Map<String, Any>): Pair<List<String>, VpidsInfo?> {
+        val meta = anyMapToStringKeyMap(msg["metadata"])
+        val vpidsRaw = (msg["vpids"] ?: meta?.get("vpids")) as? List<*>
+        val vpids = vpidsRaw?.mapNotNull { it?.toString()?.takeIf { s -> s.isNotEmpty() } } ?: emptyList()
+        val infoAny = msg["vpids_info"] ?: meta?.get("vpids_info")
+        val infoMap = anyMapToStringKeyMap(infoAny) ?: return vpids to null
+        val confRaw = infoMap["vpids_confidence"] as? List<*> ?: emptyList<Any>()
+        val vpidsConfidence = confRaw.mapNotNull { item ->
+            val m = anyMapToStringKeyMap(item) ?: return@mapNotNull null
+            val speakerRaw = m["speaker"] ?: return@mapNotNull null
+            val speaker = when (speakerRaw) {
+                is Number -> speakerRaw.toString()
+                else -> speakerRaw.toString().trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            }
+            val conf = (m["confidence"] as? Number)?.toDouble() ?: return@mapNotNull null
+            SpeakerConfidence(speaker, conf)
+        }
+        val speechDurationMs = (infoMap["speech_duration"] as? Number)?.toLong()
+        return vpids to VpidsInfo(vpidsConfidence, speechDurationMs)
+    }
+
     private fun handleUserMessage(agentUserId: String, msg: Map<String, Any>) {
         val text = msg["text"] as? String ?: ""
-        if (text.isEmpty()) {
-            callMessagePrint(TAG, "user message but text is null")
-            return
-        }
         val turnId = (msg["turn_id"] as? Number)?.toLong() ?: 0L
         val userId = msg["user_id"]?.toString() ?: ""
         val isFinal = msg["final"] as? Boolean ?: false
+        val (vpids, vpidsInfo) = parseVpidsFromUserMessage(msg)
+        if (text.isEmpty() && vpids.isEmpty() && vpidsInfo == null) {
+            callMessagePrint(TAG, "user message skipped: empty text and no vpids/vpids_info")
+            return
+        }
 
         val transcript = Transcript(
             turnId = turnId,
@@ -393,9 +424,10 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
             text = text,
             status = if (isFinal) TranscriptStatus.END else TranscriptStatus.IN_PROGRESS,
             type = TranscriptType.USER,
-            renderMode = mRenderMode ?: config.renderMode
+            renderMode = mRenderMode ?: config.renderMode,
+            vpids = vpids,
+            vpidsInfo = vpidsInfo,
         )
-        // Local user messages are directly callbacked out
         callMessagePrint(
             TAG_UI, "<<< [onTranscriptUpdated] pts:$mPresentationMs $agentUserId $transcript"
         )

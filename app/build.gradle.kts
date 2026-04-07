@@ -46,6 +46,26 @@ if (missingProperties.isNotEmpty()) {
 fun quoteForBuildConfig(value: String): String =
     value.replace("\\", "\\\\").replace("\"", "\\\"")
 
+/**
+ * 与 Android `common/build.gradle` + `gradle.properties` 对齐的 OSS STS 解析：
+ * - `env.properties` 里**若写了** `OSS_STS_TOKEN_URL`（含空字符串）→ 严格使用该值（空 = 仅本地、不上传 OSS）
+ * - **若未写该键**（常见：整行注释掉）→ 再试 `local.properties`，最后回退到与 `Android/gradle.properties` 相同的测试环境 URL
+ */
+fun resolveOssStsTokenUrlForBuild(): String {
+    val fromEnv = envProperties.getProperty("OSS_STS_TOKEN_URL")
+    if (fromEnv != null) {
+        return fromEnv.trim()
+    }
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        val lp = Properties()
+        localFile.inputStream().use { lp.load(it) }
+        val fromLocal = lp.getProperty("OSS_STS_TOKEN_URL")?.trim().orEmpty()
+        if (fromLocal.isNotEmpty()) return fromLocal
+    }
+    return "https://ai-sprite.geely-test.com/vaep/v1/sts/token"
+}
+
 android {
     namespace = "cn.shengwang.convoai.quickstart"
     compileSdk = 36
@@ -115,6 +135,12 @@ android {
             "SAL_BIOMETRIC_SAMPLE_URLS",
             "\"${quoteForBuildConfig(envProperties.getProperty("SAL_BIOMETRIC_SAMPLE_URLS", ""))}\""
         )
+        // 阿里云 OSS STS（解析规则见 resolveOssStsTokenUrlForBuild；与 Android common 默认一致）
+        buildConfigField(
+            "String",
+            "OSS_STS_TOKEN_URL",
+            "\"${quoteForBuildConfig(resolveOssStsTokenUrlForBuild())}\""
+        )
     }
 
     buildTypes {
@@ -124,11 +150,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 }
 
@@ -168,4 +194,23 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+
+    // facedet AAR（与 Android/scenes/convoai 对齐的传递依赖）
+    implementation(files("libs/facedet-release.aar"))
+    val mediapipe = "0.10.14"
+    implementation("com.google.mediapipe:tasks-vision:$mediapipe")
+    implementation("com.google.mediapipe:tasks-core:$mediapipe")
+    implementation("org.openpnp:opencv:4.9.0-0")
+    val tflite = "2.14.0"
+    implementation("org.tensorflow:tensorflow-lite:$tflite")
+    implementation("org.tensorflow:tensorflow-lite-gpu:$tflite")
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:$tflite")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("com.google.guava:guava:33.3.1-android")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    // 阿里云 OSS（与 Android common OssTestBucketUploader 一致）
+    implementation("com.aliyun.dpa:oss-android-sdk:2.9.19")
 }

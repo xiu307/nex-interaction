@@ -4,4 +4,83 @@
     <string name="audio_input_stop">Stop Audio</string>
     <string name="video_input_start">Input Video</string>
     <string name="video_input_stop">Stop Video</string>
+    <string name="biometric_face_internal_error">内部错误：无照片 URI</string>
+    <string name="biometric_faceid_waiting">等待初始化…</string>
+    <string name="biometric_register_link">人脸注册</string>
+    <string name="biometric_register_title">人脸注册</string>
+    <string name="biometric_faceid_hint">注册后的 faceId</string>
+    <string name="biometric_capture_face">拍照注册人脸</string>
+    <string name="biometric_preview">预览</string>
+    <string name="biometric_need_camera">需要相机权限</string>
+    <string name="biometric_face_cancel">已取消拍照</string>
+    <string name="biometric_face_decoding">解码中…</string>
+    <string name="biometric_face_decode_fail">图片解码失败</string>
+    <string name="biometric_face_enrolling">入库中…</string>
+    <string name="biometric_lib_not_ready">人脸识别未就绪</string>
+    <string name="biometric_recognition_not_ready">识别模块未就绪</string>
+    <string name="biometric_recognition_detail">识别未就绪：%1$s</string>
+    <string name="biometric_init_library">初始化引擎…</string>
+    <string name="biometric_init_fail">初始化失败：%1$s</string>
+    <string name="biometric_face_ready">可点击拍照注册</string>
+    <string name="biometric_opening_camera">打开相机…</string>
+    <string name="biometric_face_ok">已注册 faceId=%1$s 质量=%2$.3f</string>
+    <string name="biometric_face_ok_toast">已注册 faceId %1$s</string>
+    <string name="biometric_face_saved">已保存 faceId：%1$s</string>
+
+    <!-- 与 Android CovBiometricRegisterActivity 对齐 -->
+    <string name="biometric_register_title_full">声纹与面部注册</string>
+    <string name="biometric_step1_title">步骤 1 · 拍照注册人脸</string>
+    <string name="biometric_step1_hint">顺序：① 拍照入库并分配 faceId，人脸图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
+    <string name="biometric_faceid_input_hint">例如 person_1</string>
+    <string name="biometric_faceid_save">拍照并注册人脸</string>
+    <string name="biometric_faceid_enrolled_uploading">已注册 faceId=%1$s 质量=%2$.3f，正在上传人脸图…</string>
+    <string name="biometric_face_image_upload_fail">人脸图处理或上传失败</string>
+    <string name="biometric_face_image_upload_fail_code">人脸图上传失败 code=%d</string>
+    <string name="biometric_oss_sts_not_configured">当前无可用 OSS STS（URL 为空或仅本地模式）。需要上传时请在 env.properties 填写 OSS_STS_TOKEN_URL 并重新编译；与 Android 一致的可不写该键以使用默认测试 STS。</string>
+    <string name="biometric_oss_init_fail">STS/OSS 初始化失败（code=8）：请检查 OSS_STS_TOKEN_URL 是否可达、STS 返回是否含 accessKeyId / accessKeySecret / securityToken。详见 logcat 标签 OssTestBucket。</string>
+    <string name="biometric_oss_network_fail">OSS 网络异常（code=9），请检查网络后重试。</string>
+    <string name="biometric_oss_service_fail">OSS 服务错误（code=10），请查看 logcat 中 OssTestBucket。</string>
+    <string name="biometric_oss_upload_fail_generic">OSS 上传失败 code=%d</string>
+    <string name="biometric_face_image_upload_ok">人脸图已上传：%s</string>
+    <string name="biometric_permission_need">需要相机与麦克风权限</string>
+    <string name="biometric_step2_title">步骤 2 · 声纹 PCM 上传 OSS</string>
+    <string name="biometric_voice_hint">16kHz / 16bit / 单声道 raw PCM</string>
+    <string name="biometric_voice_reading_title">请朗读下面文字（约30字）：</string>
+    <string name="biometric_voice_reading_sample">今天阳光很好，我打算下午去书店逛一逛，顺便买本新书回家慢慢看。</string>
+    <string name="biometric_voice_start">开始录音</string>
+    <string name="biometric_voice_stop">停止并上传</string>
+    <string name="biometric_voice_idle">未录制</string>
+    <string name="biometric_voice_recording">录音中…</string>
+    <string name="biometric_saved_path">已保存：%s</string>
+    <string name="biometric_voice_upload_pending">录音已结束，正在上传声纹…</string>
+    <string name="biometric_gate_step1">请先完成步骤 1：拍照注册并等待人脸图 OSS 成功</string>
+    <string name="biometric_gate_step2">请先完成步骤 2：录音并上传声纹 PCM</string>
+    <string name="biometric_faceid_mismatch_pcm">faceId 与已注册的不一致</string>
+    <string name="biometric_step3_title">步骤 3 · 保存到本地</string>
+    <string name="biometric_save_registration_hint">人脸图与 PCM 均为 OSS 成功时，会自动同步到下方「上次保存」与 biometric_registration.json（仅含 OSS 的 http 链接，不含本地路径）；也可手动再点保存。对话 SAL 的 sample_urls 仅使用双 http 注册。</string>
+    <string name="biometric_save_only_oss_hint">仅在人脸图与声纹均已 OSS 上传成功（双 http）时才会写入本地快照与 biometric_registration.json；请先完成上传。</string>
+    <string name="biometric_save_registration">保存到本地</string>
+    <string name="biometric_save_registration_need_face_id">请先完成人脸注册</string>
+    <string name="biometric_missing_face_oss">人脸图 OSS</string>
+    <string name="biometric_missing_pcm_oss">声纹 PCM OSS</string>
+    <string name="biometric_save_registration_incomplete">请先完成：%s</string>
+    <string name="biometric_save_registration_ok">已保存到本地</string>
+    <string name="biometric_save_registration_status_detail">上次保存：%4$s\nfaceId：%1$s\n人脸图：%2$s\nPCM：%3$s</string>
+    <string name="biometric_pcm_upload_fail">声纹上传失败：%s</string>
+    <string name="biometric_pcm_upload_ok">声纹已上传：%s</string>
+    <string name="biometric_view_registered">查看已注册/SAL</string>
+    <string name="biometric_view_registered_title">注册记录与 SAL</string>
+    <string name="biometric_no_registered_rows">暂无登记条目（未完成步骤或已清除数据）。</string>
+    <string name="biometric_snapshot_block">【上次「保存到本地」快照】\nfaceId：%1$s\n人脸：%2$s\nPCM：%3$s\n</string>
+    <string name="biometric_row_face_line">人脸图（OSS）：%1$s</string>
+    <string name="biometric_row_pcm_line">声纹 PCM（OSS）：%1$s</string>
+    <string name="biometric_sal_ready_line">可进对话 SAL（sample_urls）：%1$s</string>
+    <string name="biometric_sal_ready_yes">是（双 http）</string>
+    <string name="biometric_sal_ready_no">否（需 OSS 上传成功）</string>
+    <string name="biometric_auto_snapshot_synced">已自动写入本地快照与 biometric_registration.json（双 OSS 成功）</string>
+    <string name="biometric_clear_registration">清除注册</string>
+    <string name="biometric_clear_registration_title">清除本地注册？</string>
+    <string name="biometric_clear_registration_message">将删除本页的 OSS 映射与快照、注册目录下临时文件，并删除人脸库中已登记用户（person_x）。此操作不可恢复。</string>
+    <string name="biometric_clear_registration_ok">已清除</string>
+    <string name="biometric_clear_registration_confirm_btn">确认清除</string>
 </resources>

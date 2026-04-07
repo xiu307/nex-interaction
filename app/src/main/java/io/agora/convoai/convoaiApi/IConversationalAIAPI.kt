@@ -443,6 +443,18 @@ enum class TranscriptRenderMode {
     Text
 }
 
+/** SAL：服务端在 user.transcription 中可能下发的说话人置信度。 */
+data class SpeakerConfidence(
+    val speaker: String,
+    val confidence: Double,
+)
+
+/** 与 [vpids] 配套的详情（对应 JSON `vpids_info`）。 */
+data class VpidsInfo(
+    val vpidsConfidence: List<SpeakerConfidence> = emptyList(),
+    val speechDurationMs: Long? = null,
+)
+
 /**
  * Data class representing a complete transcript message for UI rendering.
  *
@@ -451,6 +463,8 @@ enum class TranscriptRenderMode {
  * @property text The actual transcript text content
  * @property status Current status of the transcript
  * @property type transcript type (AGENT/USER)
+ * @property vpids SAL 识别的说话人 id 列表
+ * @property vpidsInfo 置信度等（仅 USER 且服务端下发时非空）
  */
 data class Transcript constructor(
     /** Unique identifier for the conversation turn */
@@ -465,6 +479,8 @@ data class Transcript constructor(
     var type: TranscriptType,
     /** real render mode */
     var renderMode: TranscriptRenderMode,
+    val vpids: List<String> = emptyList(),
+    val vpidsInfo: VpidsInfo? = null,
 )
 
 /**

@@ -24,6 +24,7 @@ import io.agora.convoai.convoaiApi.Metric
 import io.agora.convoai.convoaiApi.ModuleError
 import io.agora.convoai.convoaiApi.StateChangeEvent
 import io.agora.convoai.convoaiApi.Transcript
+import io.agora.convoai.convoaiApi.TranscriptType
 import io.agora.convoai.convoaiApi.VoiceprintStateChangeEvent
 import io.agora.rtc2.Constants
 import io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER
@@ -46,7 +47,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
+import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
+import cn.shengwang.convoai.quickstart.biometric.ConvoFacedetDock
+import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
+import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
+import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -55,6 +62,10 @@ class AgentChatViewModel : ViewModel() {
 
     companion object {
         private const val TAG = "ConversationViewModel"
+        /** 对端 RTM 用户 ID（与 FaceRtmStreamPublisher / Android CovRtmManager 一致） */
+        private const val GEELY_RTM_PEER_USER_ID = "geely_rtm_server"
+        /** `adb logcat -s SPEAKER_BIND` */
+        private const val LOG_SPEAKER_BIND = "SPEAKER_BIND"
         private const val USER_PREFS_NAME = "agent_chat_prefs"
         private const val KEY_LOCAL_USER_ID = "local_user_id"
         private const val INVALID_UID = -1
@@ -154,6 +165,9 @@ class AgentChatViewModel : ViewModel() {
     private var rtcEngine: RtcEngineEx? = null
     private var rtmClient: RtmClient? = null
     private var isRtmLogin = false
+
+    /** 已上报的 `ROBOT_FACE_SPEAKER_BIND`，键为 `turnId_speaker`，避免同一句重复发 */
+    private val speakerBindSentKeys = mutableSetOf<String>()
     private var isLoggingIn = false
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
@@ -284,8 +298,10 @@ class AgentChatViewModel : ViewModel() {
         }
 
         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
-            // Handle transcript updates with typing animation for agent messages
             addTranscript(transcript)
+            if (transcript.type == TranscriptType.USER) {
+                maybeSendRobotFaceSpeakerBindRtm(transcript)
+            }
         }
 
         override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {
@@ -628,6 +644,7 @@ class AgentChatViewModel : ViewModel() {
                     )
                     addStatusLog("Agent start successfully")
                     Log.d(TAG, "Agent started successfully, agentId: $agentId")
+                    Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
                 },
                 onFailure = { exception ->
                     _uiState.value = _uiState.value.copy(
@@ -797,9 +814,87 @@ class AgentChatViewModel : ViewModel() {
     /**
      * Hang up and cleanup connections
      */
+    /**
+     * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
+     * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
+     */
+    /**
+     * SAL [vpids_info] 与本地 [BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls] 的 faceId 一致且置信度 > 0.5 时，
+     * 经 RTM 发送 [RobotFaceRtmProtocol.TYPE_ROBOT_FACE_SPEAKER_BIND]（对齐 Android 场景工程对话页逻辑）。
+     */
+    private fun maybeSendRobotFaceSpeakerBindRtm(transcript: Transcript) {
+        if (transcript.type != TranscriptType.USER) return
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            Log.d(LOG_SPEAKER_BIND, "skip: connectionState=${_uiState.value.connectionState}")
+            return
+        }
+        val vpidsInfo = transcript.vpidsInfo ?: return
+        val localFaceIds = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls().keys
+        val confSummary = vpidsInfo.vpidsConfidence.joinToString { "${it.speaker}=${it.confidence}" }
+        Log.d(
+            LOG_SPEAKER_BIND,
+            "check turn=${transcript.turnId} localFaceIds=$localFaceIds conf=[$confSummary]",
+        )
+        if (localFaceIds.isEmpty()) {
+            Log.d(LOG_SPEAKER_BIND, "skip: no local complete SAL face (need face OSS + PCM both)")
+            return
+        }
+        val clientId = ConvoFacedetDock.stableDeviceId(AgentApp.instance())
+        val recordId = transcript.turnId.toString()
+        val rc = rtmClient ?: return
+        var sent = false
+        for (sc in vpidsInfo.vpidsConfidence) {
+            if (sc.confidence <= 0.5) continue
+            if (!localFaceIds.contains(sc.speaker)) continue
+            val dedupeKey = "${transcript.turnId}_${sc.speaker}"
+            if (!speakerBindSentKeys.add(dedupeKey)) continue
+            val json = RobotFaceRtmProtocol.buildSpeakerBindJson(
+                clientId = clientId,
+                recordId = recordId,
+                faceId = sc.speaker,
+                speakerId = sc.speaker,
+            )
+            sent = true
+            Log.d(LOG_SPEAKER_BIND, "ROBOT_FACE_SPEAKER_BIND -> peer=$GEELY_RTM_PEER_USER_ID $json")
+            RtmPeerPlainTextPublisher.publish(rc, GEELY_RTM_PEER_USER_ID, json) { err ->
+                if (err != null) {
+                    Log.e(LOG_SPEAKER_BIND, "RTM publish failed: ${err.message}")
+                } else {
+                    Log.d(LOG_SPEAKER_BIND, "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=${sc.speaker}")
+                }
+            }
+        }
+        if (!sent) {
+            Log.d(
+                LOG_SPEAKER_BIND,
+                "skip: no row matched (need conf>0.5 AND speaker in local faceIds)",
+            )
+        }
+    }
+
+    fun refreshRobotFaceRtmUplink(activity: AppCompatActivity) {
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            FaceRtmStreamPublisher.stopAll()
+            return
+        }
+        if (customVideoTrackPublished) {
+            FaceRtmStreamPublisher.stopAll()
+            return
+        }
+        val rc = rtmClient ?: return
+        if (channelName.isEmpty()) return
+        FaceRtmStreamPublisher.start(
+            activity = activity,
+            rtmClient = rc,
+            clientId = ConvoFacedetDock.stableDeviceId(AgentApp.instance()),
+            recordId = channelName,
+        )
+    }
+
     fun hangup() {
         viewModelScope.launch {
             try {
+                FaceRtmStreamPublisher.stopAll()
                 stopExternalAudioCapture()
                 conversationalAIAPI?.unsubscribeMessage(channelName) { errorInfo ->
                     if (errorInfo != null) {
@@ -835,6 +930,7 @@ class AgentChatViewModel : ViewModel() {
                 )
                 _transcriptList.value = emptyList()
                 _agentState.value = AgentState.IDLE
+                speakerBindSentKeys.clear()
                 Log.d(TAG, "Hangup completed")
             } catch (e: Exception) {
                 Log.e(TAG, "Error during hangup: ${e.message}", e)
@@ -844,6 +940,8 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        speakerBindSentKeys.clear()
+        FaceRtmStreamPublisher.stopAll()
         stopExternalAudioCapture()
         leaveRtcChannel()
         logoutRtm()
@@ -941,6 +1039,9 @@ class AgentChatViewModel : ViewModel() {
         return if (result == ERR_OK) {
             customVideoTrackPublished = enabled
             manager.setFramePushEnabled(enabled)
+            if (enabled) {
+                FaceRtmStreamPublisher.stopAll()
+            }
             addStatusLog(
                 if (enabled) {
                     "External video publishing enabled"

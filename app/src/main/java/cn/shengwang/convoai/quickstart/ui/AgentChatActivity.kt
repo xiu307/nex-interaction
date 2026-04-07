@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import cn.shengwang.convoai.quickstart.R
+import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
 import cn.shengwang.convoai.quickstart.tools.PermissionHelp
 import cn.shengwang.convoai.quickstart.ui.common.BaseActivity
 import cn.shengwang.convoai.quickstart.video.CameraVideoInputManager
@@ -28,6 +29,8 @@ import io.agora.convoai.convoaiApi.TranscriptType
 import cn.shengwang.convoai.quickstart.databinding.ActivityAgentChatBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptUserBinding
 import cn.shengwang.convoai.quickstart.databinding.ItemTranscriptAgentBinding
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -67,6 +70,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
         // Observe debug log changes
         observeDebugLogs()
+
+        lifecycleScope.launch {
+            viewModel.uiState
+                .map { it.connectionState }
+                .distinctUntilChanged()
+                .collect { conn ->
+                    if (conn == AgentChatViewModel.ConnectionState.Connected) {
+                        viewModel.refreshRobotFaceRtmUplink(this@AgentChatActivity)
+                    } else {
+                        FaceRtmStreamPublisher.stopAll()
+                    }
+                }
+        }
     }
 
     private fun toggleVideoInput() {
@@ -131,6 +147,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         videoInputPreviewView = null
         isVideoInputStarted = false
         updateVideoInputButton()
+        viewModel.refreshRobotFaceRtmUplink(this)
     }
 
     private fun updateVideoInputButton() {
@@ -212,6 +229,10 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             // Stop button click listener
             btnStop.setOnClickListener {
                 viewModel.hangup()
+            }
+
+            tvBiometricRegister.setOnClickListener {
+                BiometricRegisterActivity.start(this@AgentChatActivity)
             }
         }
     }

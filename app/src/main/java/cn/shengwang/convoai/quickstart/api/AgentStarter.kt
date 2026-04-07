@@ -1,6 +1,8 @@
 package cn.shengwang.convoai.quickstart.api
 
+import android.util.Log
 import cn.shengwang.convoai.quickstart.KeyCenter
+import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
 import cn.shengwang.convoai.quickstart.api.net.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,6 +22,9 @@ import org.json.JSONObject
  * Pipeline (ASR/LLM/TTS) is configured inline in the request body.
  */
 object AgentStarter {
+    private const val TAG = "AgentStarter"
+    /** 短标签，便于 `adb logcat -s SAL:I`（部分机型对 AgentStarter 过滤异常） */
+    private const val TAG_SAL = "SAL"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     /** 实验室预置声纹（SAL sample_urls 键与 PCM URL） */
@@ -49,6 +54,7 @@ object AgentStarter {
         remoteRtcUid: String
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
+            Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUid=$remoteRtcUid")
             val projectId = KeyCenter.APP_ID
             val url = "$API_BASE_URL/$projectId/join"
 
@@ -124,12 +130,16 @@ object AgentStarter {
 
                 put("tts", buildTtsJson())
 
+                val sampleUrlsJson = buildSalSampleUrlsJson(
+                    KeyCenter.SAL_ENABLE_PERSONALIZED,
+                    deviceId.toString(),
+                )
+                val salPretty = sampleUrlsJson.toString(2)
+                Log.i(TAG, "SAL sample_urls (${sampleUrlsJson.length()} keys, uidStr=$deviceId):\n$salPretty")
+                Log.i(TAG_SAL, salPretty)
                 put("sal", JSONObject().apply {
                     put("sal_mode", "recognition")
-                    put(
-                        "sample_urls",
-                        buildSalSampleUrlsJson(KeyCenter.SAL_ENABLE_PERSONALIZED, deviceId.toString())
-                    )
+                    put("sample_urls", sampleUrlsJson)
                 })
 
                 put("turn_detection", JSONObject().apply {
@@ -158,9 +168,18 @@ object AgentStarter {
         } catch (_: Exception) {
             JSONObject()
         }
+        val registryComplete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
+        Log.i(TAG, "SAL: getCompleteSalFaceIdToPcmUrls size=${registryComplete.size} keys=${registryComplete.keys}")
+        if (registryComplete.isEmpty() && BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()) {
+            Log.w(
+                TAG,
+                "SAL: 本地有人脸/声纹记录，但人脸图与 PCM 均须为 http(s) OSS URL 才会进入 sample_urls；" +
+                    "仅 local:// 或未上传 OSS 时云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。",
+            )
+        }
         val hasBiometricEntries = biometricJson.keys().asSequence().any { k ->
             k.isNotEmpty() && biometricJson.optString(k, "").isNotEmpty()
-        }
+        } || registryComplete.isNotEmpty()
         val out = JSONObject()
         if (enablePersonalized) {
             KeyCenter.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
@@ -170,6 +189,12 @@ object AgentStarter {
             val key = keyIt.next()
             val v = biometricJson.optString(key, "")
             if (key.isNotEmpty() && v.isNotEmpty()) out.put(key, v)
+        }
+        // 与 CovLivingViewModel：本地注册页完成的 faceId→PCM（须同时有人脸图 OSS 与 PCM OSS）
+        for ((faceId, pcmUrl) in registryComplete) {
+            if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
+                out.put(faceId, pcmUrl)
+            }
         }
         if (!hasBiometricEntries) {
             out.put(SAL_LAB_SPEAKER1_ID, SAL_LAB_PCM_URL_SPEAKER1)

@@ -31,4 +31,7 @@ object KeyCenter {
     val SAL_ENABLE_PERSONALIZED: Boolean = BuildConfig.SAL_ENABLE_PERSONALIZED
     val SAL_PERSONALIZED_PCM_URL: String = BuildConfig.SAL_PERSONALIZED_PCM_URL
     val SAL_BIOMETRIC_SAMPLE_URLS: String = BuildConfig.SAL_BIOMETRIC_SAMPLE_URLS
+
+    /** 运行时 STS 地址（由 Gradle 注入，解析顺序与 Android common 一致，见 app/build.gradle.kts） */
+    val OSS_STS_TOKEN_URL: String = BuildConfig.OSS_STS_TOKEN_URL
 }
