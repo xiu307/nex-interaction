@@ -50,7 +50,6 @@ import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
-import cn.shengwang.convoai.quickstart.biometric.ConvoFacedetDock
 import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
 import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
 import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
@@ -819,6 +818,12 @@ class AgentChatViewModel : ViewModel() {
      * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
      */
     /**
+     * 与 join 请求体 `remoteRtcUid` / `llm.params.lables.userName` 一致；
+     * [ROBOT_FACE_SPEAKER_BIND]、[ROBOT_FACE_INFO_UP] 顶层 `clientId` 及 facedet [FaceDetectorConfig.deviceId] 均用此值。
+     */
+    private fun rtmReportClientId(): String = userId.toString()
+
+    /**
      * SAL [vpids_info] 与本地 [BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls] 的 faceId 一致且置信度 > 0.5 时，
      * 经 RTM 发送 [RobotFaceRtmProtocol.TYPE_ROBOT_FACE_SPEAKER_BIND]（对齐 Android 场景工程对话页逻辑）。
      */
@@ -839,7 +844,7 @@ class AgentChatViewModel : ViewModel() {
             Log.d(LOG_SPEAKER_BIND, "skip: no local complete SAL face (need face OSS + PCM both)")
             return
         }
-        val clientId = ConvoFacedetDock.stableDeviceId(AgentApp.instance())
+        val clientId = rtmReportClientId()
         val recordId = transcript.turnId.toString()
         val rc = rtmClient ?: return
         var sent = false
@@ -886,7 +891,7 @@ class AgentChatViewModel : ViewModel() {
         FaceRtmStreamPublisher.start(
             activity = activity,
             rtmClient = rc,
-            clientId = ConvoFacedetDock.stableDeviceId(AgentApp.instance()),
+            clientId = rtmReportClientId(),
             recordId = channelName,
         )
     }

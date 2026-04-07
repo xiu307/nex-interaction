@@ -189,6 +189,32 @@ object BiometricSalRegistry {
     }
 
     /**
+     * 删除指定 [faceId] 的人脸图与 PCM 映射；若本地快照对应该 faceId 则一并清除；
+     * 若 [getLastRegisteredFaceId] 与之一致则改为剩余条目的第一个或清空。
+     * 随后调用 [ConvoFacedetDock.clearFacePipelineState]：删 ArcFace embedding + 清 pipeline 跟踪状态。
+     */
+    fun removeRegistrationForFaceId(faceId: String) {
+        if (faceId.isEmpty()) return
+        val faceMap = loadFaceImageMap().toMutableMap()
+        val pcmMap = loadMap().toMutableMap()
+        faceMap.remove(faceId)
+        pcmMap.remove(faceId)
+        val e = prefs().edit()
+        e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(faceMap))
+        e.putString(KEY_MAP, gson.toJson(pcmMap))
+        val snap = getRegistrationSnapshot()
+        if (snap?.faceId == faceId) {
+            e.remove(KEY_REGISTRATION_SNAPSHOT)
+        }
+        if (getLastRegisteredFaceId() == faceId) {
+            val remaining = faceMap.keys.union(pcmMap.keys).filter { it.isNotEmpty() }.sorted().firstOrNull()
+            e.putString("biometric_last_face_id", remaining ?: "")
+        }
+        e.commit()
+        ConvoFacedetDock.clearFacePipelineState(AgentApp.instance(), faceId)
+    }
+
+    /**
      * 清除本页所有登记数据（URL 映射、快照、last faceId、本地路径键）。不修改 [KEY_ROBOT_FACE_RTM]。
      */
     fun clearAllRegistration() {
@@ -203,6 +229,7 @@ object BiometricSalRegistry {
             }
         }
         e.commit()
+        ConvoFacedetDock.clearAllFacesPipelineState(AgentApp.instance())
     }
 
     fun setLastRegisteredFaceId(id: String?) {

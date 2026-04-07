@@ -74,17 +74,26 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
      */
     protected abstract fun initView()
 
+    /**
+     * Edge-to-edge 下为根布局叠加状态栏/导航栏 inset；必须保留 XML 原有 padding，否则仅设 systemBars.top
+     * 会吞掉原来的内边距，标题行「人脸注册」等易被挡在状态栏/刘海后。
+     */
     fun setOnApplyWindowInsetsListener(view: View) {
+        val baseStart = view.paddingStart
+        val baseTop = view.paddingTop
+        val baseEnd = view.paddingEnd
+        val baseBottom = view.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPaddingRelative(
-                systemBars.left + v.paddingLeft,
-                systemBars.top,
-                systemBars.right + v.paddingRight,
-                systemBars.bottom
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPaddingRelative(
+                bars.left + baseStart,
+                bars.top + baseTop,
+                bars.right + baseEnd,
+                bars.bottom + baseBottom,
             )
             insets
         }
+        ViewCompat.requestApplyInsets(view)
     }
 
     /**

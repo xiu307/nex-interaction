@@ -172,6 +172,8 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    // Photo Picker（BiometricRegisterActivity 选视频）；显式版本避免传递依赖偏旧
+    implementation("androidx.activity:activity-ktx:1.9.3")
     implementation(libs.material)
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)

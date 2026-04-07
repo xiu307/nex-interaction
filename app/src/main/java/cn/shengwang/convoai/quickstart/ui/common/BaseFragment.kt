@@ -77,16 +77,21 @@ abstract class BaseFragment<VB : ViewBinding> : Fragment() {
     open fun initView() {}
 
     protected fun setOnApplyWindowInsets(view: View) {
+        val baseStart = view.paddingStart
+        val baseTop = view.paddingTop
+        val baseEnd = view.paddingEnd
+        val baseBottom = view.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPaddingRelative(
-                systemBars.left + v.paddingLeft,
-                systemBars.top,
-                systemBars.right + v.paddingRight,
-                systemBars.bottom
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPaddingRelative(
+                bars.left + baseStart,
+                bars.top + baseTop,
+                bars.right + baseEnd,
+                bars.bottom + baseBottom,
             )
             insets
         }
+        ViewCompat.requestApplyInsets(view)
     }
 
     /**

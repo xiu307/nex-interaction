@@ -61,7 +61,7 @@ object FaceRtmStreamPublisher {
         this.recordIdStr = recordId
         activityRef = activity
 
-        val detector = FaceDetector(ConvoFacedetDock.configForLiveSession(activity))
+        val detector = FaceDetector(ConvoFacedetDock.configForLiveSession(activity, clientId))
         detector.setRecordId(recordId)
         detector.setCallback(
             object : FrameAnalysisCallback {
@@ -99,6 +99,43 @@ object FaceRtmStreamPublisher {
 
         mainHandler.post(tickRunnable)
         Log.d(TAG, "Face RTM uplink (facedet) started")
+    }
+
+    /** 从人脸库（ArcFace embedding）删除指定 userId，与注册时使用的 id 一致（如 `person_1`）。 */
+    fun deleteEmbeddingIfRunning(faceId: String) {
+        if (faceId.isEmpty()) return
+        runCatching {
+            val fd = faceDetector ?: return
+            val im = fd.multiPersonRecognitionManager?.getIdentityManager() ?: return
+            im.deleteEmbedding(faceId)
+        }.onFailure { Log.w(TAG, "deleteEmbeddingIfRunning: ${it.message}") }
+    }
+
+    /** 删除人脸库中全部已登记用户（全量删 embedding）。 */
+    fun deleteAllEmbeddingsIfRunning() {
+        runCatching {
+            val fd = faceDetector ?: return
+            val im = fd.multiPersonRecognitionManager?.getIdentityManager() ?: return
+            for (uid in im.getAllUserIds().toList()) {
+                im.deleteEmbedding(uid)
+            }
+        }.onFailure { Log.w(TAG, "deleteAllEmbeddingsIfRunning: ${it.message}") }
+    }
+
+    /**
+     * 实时 pipeline 运行时清除指定 faceId 的跟踪状态（与 [com.robotchat.facedet.FaceDetector.clearFace] 一致）。
+     */
+    fun clearFaceIfRunning(faceId: String) {
+        if (faceId.isEmpty()) return
+        runCatching { faceDetector?.clearFace(faceId) }
+            .onFailure { Log.w(TAG, "clearFaceIfRunning: ${it.message}") }
+    }
+
+    /** 软重置当前实时 pipeline 的所有人脸状态（不释放相机与模型）。 */
+    fun clearAllFacesIfRunning() {
+        runCatching { faceDetector?.clearAllFaces() }
+            .onFailure { Log.w(TAG, "clearAllFacesIfRunning: ${it.message}") }
+        synchronized(latestByFaceId) { latestByFaceId.clear() }
     }
 
     /** 与旧 `stop(activity)` 兼容：释放相机与定时器。 */

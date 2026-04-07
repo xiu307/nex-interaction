@@ -2,6 +2,7 @@ package cn.shengwang.convoai.quickstart.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -9,13 +10,14 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -80,8 +82,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     private var videoCaptureUri: Uri? = null
 
+    /** 系统 Photo Picker（仅视频），较 OpenDocument 更省权限、OEM 兼容性更好 */
     private val pickVideoLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri == null) {
                 enrollInProgress = false
                 refreshFaceButtonsEnabled()
@@ -99,6 +102,20 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 refreshFaceButtonsEnabled()
                 mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_video_cancel)
                 return@registerForActivityResult
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                val saved = runCatching { copyCapturedVideoToMediaStore(uri) }.getOrDefault(false)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@BiometricRegisterActivity,
+                        if (saved) {
+                            R.string.biometric_video_saved_to_gallery
+                        } else {
+                            R.string.biometric_video_save_gallery_fail
+                        },
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
             }
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_enrolling)
             enrollFromVideoUri(uri)
@@ -143,6 +160,12 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     override fun initView() {
         mBinding?.apply {
+            setOnApplyWindowInsetsListener(root)
+            setSupportActionBar(toolbar)
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.setTitle(R.string.biometric_register_title_full)
+            toolbar.setNavigationOnClickListener { finish() }
+
             val savedId = BiometricSalRegistry.getLastRegisteredFaceId().orEmpty()
             etFaceId.setText(savedId)
             if (savedId.isNotEmpty()) {
@@ -156,8 +179,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             btnVoiceStart.setOnClickListener { startPcmRecording() }
             btnVoiceStop.setOnClickListener { stopPcmRecordingAndUpload() }
             btnSaveRegistration.setOnClickListener { saveRegistrationBundle() }
-            btnViewRegistered.setOnClickListener { showRegisteredRecordsDialog() }
-            btnClearRegistration.setOnClickListener { showClearRegistrationConfirmDialog() }
+            btnViewRegistered.setOnClickListener { BiometricRegisteredRecordsActivity.start(this@BiometricRegisterActivity) }
             tvVoiceStatus.text = getString(R.string.biometric_voice_idle)
             refreshSaveRegistrationStatusText()
             refreshStepGates()
@@ -177,131 +199,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         runCatching { faceDetector?.release() }
         faceDetector = null
         super.onDestroy()
-    }
-
-    private fun showClearRegistrationConfirmDialog() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.biometric_clear_registration_title)
-            .setMessage(R.string.biometric_clear_registration_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.biometric_clear_registration_confirm_btn) { _, _ ->
-                performClearAllRegistration()
-            }
-            .show()
-    }
-
-    /**
-     * 清除 SP、工作目录文件，并删除 facedet 人脸库中全部已登记 userId（embedding）。
-     */
-    private fun performClearAllRegistration() {
-        runCatching {
-            val fd = faceDetector
-            val mgr = fd?.multiPersonRecognitionManager
-            val im = mgr?.getIdentityManager() ?: return@runCatching
-            val ids = im.getAllUserIds().toList()
-            for (uid in ids) {
-                im.deleteEmbedding(uid)
-            }
-            Log.i(TAG, "cleared face embeddings count=${ids.size}")
-        }.onFailure {
-            Log.e(TAG, "clear face SDK: ${it.message}", it)
-        }
-
-        BiometricSalRegistry.clearAllRegistration()
-        runCatching {
-            val dir = workDir()
-            if (dir.isDirectory) {
-                dir.listFiles()?.forEach { f ->
-                    runCatching { f.delete() }.onFailure { e -> Log.w(TAG, "delete ${f.name}: ${e.message}") }
-                }
-            }
-        }.onFailure {
-            Log.e(TAG, "clear work dir: ${it.message}", it)
-        }
-
-        mBinding?.apply {
-            etFaceId.setText("")
-            previewFace.setImageDrawable(null)
-            tvFaceIdStatus.text = getString(R.string.biometric_faceid_waiting)
-            tvVoiceStatus.text = getString(R.string.biometric_voice_idle)
-            tvSaveRegistrationStatus.text = ""
-        }
-        refreshStepGates()
-        refreshSaveRegistrationStatusText()
-        applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = false)
-        refreshFaceButtonsEnabled()
-        Toast.makeText(this, R.string.biometric_clear_registration_ok, Toast.LENGTH_SHORT).show()
-    }
-
-    /** 仅展示 OSS http 链接；local:// 或未上传显示为「—」。 */
-    private fun formatOssUrlForDialog(url: String?): String {
-        if (url.isNullOrBlank()) return "—"
-        return if (BiometricSalRegistry.isHttpUrl(url)) url else "—"
-    }
-
-    /** 展示 SharedPreferences + 上次快照；标明是否满足 SAL（双 http）。 */
-    private fun showRegisteredRecordsDialog() {
-        val rows = BiometricSalRegistry.getAllStoredPersonRows()
-        val snap = BiometricSalRegistry.getRegistrationSnapshot()
-        val complete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
-        val sb = StringBuilder()
-        if (snap != null) {
-            sb.append(
-                getString(
-                    R.string.biometric_snapshot_block,
-                    snap.faceId,
-                    snap.faceImageOssUrl,
-                    snap.pcmOssUrl,
-                ),
-            ).append("\n")
-        }
-        if (rows.isEmpty()) {
-            sb.append(getString(R.string.biometric_no_registered_rows))
-        } else {
-            for (row in rows) {
-                val salReady = complete.containsKey(row.faceId)
-                sb.append("━━ ").append(row.faceId).append(" ━━\n")
-                sb.append(
-                    getString(
-                        R.string.biometric_row_face_line,
-                        formatOssUrlForDialog(row.faceImageOssUrl),
-                    ),
-                ).append("\n")
-                sb.append(
-                    getString(
-                        R.string.biometric_row_pcm_line,
-                        formatOssUrlForDialog(row.pcmOssUrl),
-                    ),
-                ).append("\n")
-                sb.append(
-                    getString(
-                        R.string.biometric_sal_ready_line,
-                        getString(
-                            if (salReady) {
-                                R.string.biometric_sal_ready_yes
-                            } else {
-                                R.string.biometric_sal_ready_no
-                            },
-                        ),
-                    ),
-                ).append("\n\n")
-            }
-        }
-        val scroll = ScrollView(this)
-        val tv = TextView(this).apply {
-            text = sb.toString()
-            setTextColor(ContextCompat.getColor(this@BiometricRegisterActivity, android.R.color.black))
-            textSize = 12f
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad)
-            setTextIsSelectable(true)
-        }
-        scroll.addView(tv)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.biometric_view_registered_title)
-            .setView(scroll)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
     }
 
     private fun workDir(): File {
@@ -415,7 +312,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         enrollInProgress = true
         refreshFaceButtonsEnabled()
         mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_pick_video)
-        pickVideoLauncher.launch(arrayOf("video/*"))
+        pickVideoLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+        )
     }
 
     private fun launchFaceRecordVideo() {
@@ -467,6 +366,67 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 refreshFaceButtonsEnabled()
                 mBinding?.tvFaceIdStatus?.text = e.message ?: "CaptureVideo failed"
             }
+        }
+    }
+
+    /**
+     * 将「或录制新视频」得到的缓存 mp4 复制到系统相册（MediaStore），便于之后在相册中再次选用。
+     * Android 10+ 写入 DCIM/ConversationalAI；更低版本走 [copyVideoToMediaStoreLegacy]。
+     */
+    private fun copyCapturedVideoToMediaStore(sourceUri: Uri): Boolean {
+        val displayName = "convoai_register_${System.currentTimeMillis()}.mp4"
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            copyVideoToMediaStoreQ(displayName, sourceUri)
+        } else {
+            copyVideoToMediaStoreLegacy(displayName, sourceUri)
+        }
+    }
+
+    private fun copyVideoToMediaStoreQ(displayName: String, sourceUri: Uri): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/ConversationalAI")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val outUri = contentResolver.insert(collection, values) ?: return false
+        return try {
+            contentResolver.openOutputStream(outUri)?.use { out ->
+                val input = contentResolver.openInputStream(sourceUri)
+                    ?: return false
+                input.use { it.copyTo(out) }
+            } ?: return false
+            values.clear()
+            values.put(MediaStore.Video.Media.IS_PENDING, 0)
+            contentResolver.update(outUri, values, null, null)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "copyVideoToMediaStoreQ", e)
+            runCatching { contentResolver.delete(outUri, null, null) }
+            false
+        }
+    }
+
+    private fun copyVideoToMediaStoreLegacy(displayName: String, sourceUri: Uri): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+        }
+        @Suppress("DEPRECATION")
+        val outUri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: return false
+        return try {
+            contentResolver.openOutputStream(outUri)?.use { out ->
+                val input = contentResolver.openInputStream(sourceUri)
+                    ?: return false
+                input.use { it.copyTo(out) }
+            } ?: return false
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "copyVideoToMediaStoreLegacy", e)
+            runCatching { contentResolver.delete(outUri, null, null) }
+            false
         }
     }
 
@@ -570,6 +530,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 bytes
             }
             if (jpegBytes == null || jpegBytes.isEmpty()) {
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_upload_fail_status)
                 Toast.makeText(this@BiometricRegisterActivity, R.string.biometric_face_image_upload_fail, Toast.LENGTH_SHORT).show()
                 return@launch
             }
@@ -594,6 +555,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 }
             }.getOrElse {
                 Log.e(TAG, "face OSS: ${it.message}", it)
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_upload_fail_status)
                 Toast.makeText(this@BiometricRegisterActivity, R.string.biometric_face_image_upload_fail, Toast.LENGTH_SHORT).show()
                 return@launch
             }
@@ -608,6 +570,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 refreshStepGates()
                 persistRegistrationSnapshotIfHttpCompleteAfterOss()
             } else {
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_upload_fail_status)
                 Toast.makeText(
                     this@BiometricRegisterActivity,
                     messageForOssUploadFailure(upload),
@@ -641,14 +604,71 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         return BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls().containsKey(id)
     }
 
+    /** 人脸封面图已写入 OSS 的 http(s) URL 时视为步骤一在 OSS 侧完成 */
+    private fun isStep1OssHttpComplete(): Boolean {
+        val lastId = BiometricSalRegistry.getLastRegisteredFaceId() ?: return false
+        val url = BiometricSalRegistry.getFaceImageHttpUrl(lastId) ?: return false
+        return BiometricSalRegistry.isHttpUrl(url)
+    }
+
+    /** 声纹 PCM 已写入 OSS 的 http(s) URL 时视为步骤二在 OSS 侧完成 */
+    private fun isStep2OssHttpComplete(): Boolean {
+        val lastId = BiometricSalRegistry.getLastRegisteredFaceId() ?: return false
+        val url = BiometricSalRegistry.getPcmHttpUrl(lastId) ?: return false
+        return BiometricSalRegistry.isHttpUrl(url)
+    }
+
+    /** 步骤标题下说明：OSS 上传成功后切换为「步骤一/二注册完毕」，否则保持初始说明。 */
+    private fun refreshStepSectionHints() {
+        val m = mBinding ?: return
+        m.tvStep1Hint.text = if (isStep1OssHttpComplete()) {
+            getString(R.string.biometric_step1_done_hint)
+        } else {
+            getString(R.string.biometric_step1_hint)
+        }
+        m.tvStep2Hint.text = if (isStep2OssHttpComplete()) {
+            getString(R.string.biometric_step2_done_hint)
+        } else {
+            getString(R.string.biometric_voice_hint)
+        }
+    }
+
     private fun refreshStepGates() {
         val m = mBinding ?: return
         val step1 = isStep1Complete()
-        val step2 = isStep2Complete()
         if (!isRecordingPcm) {
             m.btnVoiceStart.isEnabled = step1
         }
         m.btnSaveRegistration.isEnabled = canPersistRegistrationSnapshotWithOssOnly()
+        refreshStepSectionHints()
+        syncBiometricDetailStatusLines()
+    }
+
+    /**
+     * 将步骤 1/2 下方状态行与 SP 中 OSS 结果对齐，避免 OSS 已成功仍停留在「正在上传人脸图…」等中间态。
+     */
+    private fun syncBiometricDetailStatusLines() {
+        val m = mBinding ?: return
+        val faceId = BiometricSalRegistry.getLastRegisteredFaceId()?.trim().orEmpty()
+        if (faceId.isNotEmpty()) {
+            if (isStep1OssHttpComplete()) {
+                m.tvFaceIdStatus.text = getString(R.string.biometric_face_status_line_oss_done, faceId)
+            } else if (!enrollInProgress &&
+                BiometricSalRegistry.getFaceImageHttpUrl(faceId) == BiometricSalRegistry.FACE_IMAGE_URL_LOCAL_ONLY
+            ) {
+                m.tvFaceIdStatus.text = getString(R.string.biometric_face_status_line_local, faceId)
+            }
+        }
+        if (faceId.isEmpty()) return
+        if (isStep2OssHttpComplete()) {
+            if (!isRecordingPcm) {
+                m.tvVoiceStatus.text = getString(R.string.biometric_voice_status_line_oss_done)
+            }
+        } else if (!isRecordingPcm &&
+            BiometricSalRegistry.getPcmHttpUrl(faceId) == BiometricSalRegistry.PCM_URL_LOCAL_ONLY
+        ) {
+            m.tvVoiceStatus.text = getString(R.string.biometric_voice_status_line_local)
+        }
     }
 
     /**
@@ -857,6 +877,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                     Toast.LENGTH_LONG,
                 ).show()
                 pcmFile = null
+                mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
+                refreshStepGates()
                 return@launch
             }
             if (upload.ok && !upload.url.isNullOrEmpty()) {
@@ -876,6 +898,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                     messageForOssUploadFailure(upload),
                     Toast.LENGTH_LONG,
                 ).show()
+                mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
+                refreshStepGates()
             }
             pcmFile = null
         }

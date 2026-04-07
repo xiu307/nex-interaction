@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">QuickStart Kotlin</string>
+    <string name="app_name">智能对话系统</string>
     <string name="audio_input_start">Input Audio</string>
     <string name="audio_input_stop">Stop Audio</string>
     <string name="video_input_start">Input Video</string>
@@ -31,12 +31,15 @@
     <!-- 与 Android CovBiometricRegisterActivity 对齐 -->
     <string name="biometric_register_title_full">声纹与面部注册</string>
     <string name="biometric_step1_title">步骤 1 · 视频注册人脸</string>
-    <string name="biometric_step1_hint">顺序：① 录制或从相册选视频，facedet 多角度抽帧入库并分配 faceId，人脸封面图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
+    <string name="biometric_step1_hint">若已将注册用视频保存在相册，请直接点下方「从相册选视频」，无需再次录制。完整顺序：① 从相册选视频或录制新视频 → facedet 抽帧入库并分配 faceId，封面图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
+    <string name="biometric_step1_done_hint">步骤一注册完毕</string>
     <string name="biometric_faceid_input_hint">例如 person_1</string>
-    <string name="biometric_face_video_gallery">从相册选视频</string>
-    <string name="biometric_face_video_record">录制视频并注册</string>
+    <string name="biometric_face_video_gallery">从相册选视频（推荐）</string>
+    <string name="biometric_face_video_record">或录制新视频</string>
     <string name="biometric_face_video_need_cam_mic">录制需要相机与麦克风权限</string>
     <string name="biometric_video_cancel">已取消录制或未保存视频</string>
+    <string name="biometric_video_saved_to_gallery">录制视频已保存到相册（DCIM/ConversationalAI）</string>
+    <string name="biometric_video_save_gallery_fail">保存到相册失败，注册流程仍会继续</string>
     <string name="biometric_face_cancel_pick">已取消选择</string>
     <string name="biometric_face_preview_fail">人脸已注册，但无法从视频截取封面图用于上传，请重试或换一段视频</string>
     <string name="biometric_faceid_enrolled_uploading">已注册 faceId=%1$s 质量=%2$.3f，正在上传人脸图…</string>
@@ -48,9 +51,15 @@
     <string name="biometric_oss_service_fail">OSS 服务错误（code=10），请查看 logcat 中 OssTestBucket。</string>
     <string name="biometric_oss_upload_fail_generic">OSS 上传失败 code=%d</string>
     <string name="biometric_face_image_upload_ok">人脸图已上传：%s</string>
+    <string name="biometric_face_status_line_oss_done">人脸图已上传 OSS（faceId：%1$s）。步骤一完成。</string>
+    <string name="biometric_face_status_line_local">人脸图仅保存在本地（未走 OSS）。faceId：%1$s</string>
+    <string name="biometric_face_upload_fail_status">人脸图上传失败，请重试</string>
+    <string name="biometric_voice_status_line_oss_done">声纹 PCM 已上传 OSS。步骤二完成。</string>
+    <string name="biometric_voice_status_line_local">声纹 PCM 仅保存在本地（未走 OSS）</string>
     <string name="biometric_permission_need">需要相机与麦克风权限</string>
     <string name="biometric_step2_title">步骤 2 · 声纹 PCM 上传 OSS</string>
     <string name="biometric_voice_hint">16kHz / 16bit / 单声道 raw PCM</string>
+    <string name="biometric_step2_done_hint">步骤二注册完毕</string>
     <string name="biometric_voice_reading_title">请朗读下面文字（约30字）：</string>
     <string name="biometric_voice_reading_sample">今天阳光很好，我打算下午去书店逛一逛，顺便买本新书回家慢慢看。</string>
     <string name="biometric_voice_start">开始录音</string>
@@ -76,17 +85,22 @@
     <string name="biometric_pcm_upload_ok">声纹已上传：%s</string>
     <string name="biometric_view_registered">查看已注册/SAL</string>
     <string name="biometric_view_registered_title">注册记录与 SAL</string>
+    <string name="biometric_record_label_face_id">faceId</string>
+    <string name="biometric_record_label_snapshot">快照</string>
+    <string name="biometric_record_snapshot_none">—（无对应本地快照）</string>
+    <string name="biometric_record_snapshot_body">保存时间：%1$s\n人脸图：%2$s\nPCM：%3$s</string>
+    <string name="biometric_record_play_pcm">试听 PCM</string>
+    <string name="biometric_record_play_pcm_busy">播放中…</string>
+    <string name="biometric_record_delete">删除</string>
+    <string name="biometric_record_delete_title">删除本条？</string>
+    <string name="biometric_record_delete_message">将移除该 faceId 的本地映射与快照，并删除人脸库中对应 embedding、清除 pipeline 中该人跟踪状态。此操作不可恢复。</string>
+    <string name="biometric_record_pcm_cannot_preview">仅支持 http(s) OSS 上的 raw PCM（16k/16bit/单声道），当前无法试听</string>
+    <string name="biometric_record_delete_ok">已删除该条</string>
     <string name="biometric_no_registered_rows">暂无登记条目（未完成步骤或已清除数据）。</string>
-    <string name="biometric_snapshot_block">【上次「保存到本地」快照】\nfaceId：%1$s\n人脸：%2$s\nPCM：%3$s\n</string>
     <string name="biometric_row_face_line">人脸图（OSS）：%1$s</string>
     <string name="biometric_row_pcm_line">声纹 PCM（OSS）：%1$s</string>
     <string name="biometric_sal_ready_line">可进对话 SAL（sample_urls）：%1$s</string>
     <string name="biometric_sal_ready_yes">是（双 http）</string>
     <string name="biometric_sal_ready_no">否（需 OSS 上传成功）</string>
     <string name="biometric_auto_snapshot_synced">已自动写入本地快照与 biometric_registration.json（双 OSS 成功）</string>
-    <string name="biometric_clear_registration">清除注册</string>
-    <string name="biometric_clear_registration_title">清除本地注册？</string>
-    <string name="biometric_clear_registration_message">将删除本页的 OSS 映射与快照、注册目录下临时文件，并删除人脸库中已登记用户（person_x）。此操作不可恢复。</string>
-    <string name="biometric_clear_registration_ok">已清除</string>
-    <string name="biometric_clear_registration_confirm_btn">确认清除</string>
 </resources>
