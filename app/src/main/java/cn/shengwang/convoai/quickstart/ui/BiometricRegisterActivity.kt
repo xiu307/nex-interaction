@@ -9,6 +9,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.ScrollView
 import android.widget.TextView
@@ -107,13 +109,16 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             val camOk = result[Manifest.permission.CAMERA] == true
             val micOk = result[Manifest.permission.RECORD_AUDIO] == true
             if (camOk && micOk) {
-                startVideoCaptureForEnrollment()
+                // 权限弹窗刚关闭时立刻 startActivityForResult 部分机型会 IllegalStateException，延后一帧
+                mainHandler.post { startVideoCaptureForEnrollment() }
             } else {
                 enrollInProgress = false
                 refreshFaceButtonsEnabled()
                 mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_video_need_cam_mic)
             }
         }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var audioRecord: AudioRecord? = null
     private var pcmOut: FileOutputStream? = null
@@ -153,8 +158,11 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             refreshSaveRegistrationStatusText()
             refreshStepGates()
         }
-        prepareFaceDetectorLikeDemoOnCreate()
-        checkPermissions()
+        // 避免在 onCreate 同步阶段做 facedet 原生初始化 / 弹权限，部分机型会崩；首帧后再执行
+        mBinding?.root?.post {
+            prepareFaceDetectorLikeDemoOnCreate()
+            checkPermissions()
+        }
     }
 
     override fun onDestroy() {
@@ -433,13 +441,15 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             file,
         )
         videoCaptureUri = uri
-        runCatching {
-            captureVideoLauncher.launch(uri)
-        }.onFailure { e ->
-            Log.e(TAG, "CaptureVideo launch failed", e)
-            enrollInProgress = false
-            refreshFaceButtonsEnabled()
-            mBinding?.tvFaceIdStatus?.text = e.message ?: "CaptureVideo failed"
+        mainHandler.post {
+            runCatching {
+                captureVideoLauncher.launch(uri)
+            }.onFailure { e ->
+                Log.e(TAG, "CaptureVideo launch failed", e)
+                enrollInProgress = false
+                refreshFaceButtonsEnabled()
+                mBinding?.tvFaceIdStatus?.text = e.message ?: "CaptureVideo failed"
+            }
         }
     }
 
