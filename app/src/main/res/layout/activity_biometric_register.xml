@@ -105,13 +105,24 @@
                     android:textColorHint="@color/text_subtitle" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_save_face_id"
+                    android:id="@+id/btn_face_from_gallery"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:enabled="false"
-                    android:text="@string/biometric_faceid_save"
+                    android:text="@string/biometric_face_video_gallery"
+                    android:textColor="@color/white"
+                    app:strokeColor="@color/white" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_face_record"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:enabled="false"
+                    android:text="@string/biometric_face_video_record"
                     android:textColor="@color/white"
                     app:strokeColor="@color/white" />
 

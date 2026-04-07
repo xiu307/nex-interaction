@@ -12,16 +12,17 @@
     <string name="biometric_capture_face">拍照注册人脸</string>
     <string name="biometric_preview">预览</string>
     <string name="biometric_need_camera">需要相机权限</string>
-    <string name="biometric_face_cancel">已取消拍照</string>
+    <string name="biometric_face_cancel">已取消</string>
     <string name="biometric_face_decoding">解码中…</string>
     <string name="biometric_face_decode_fail">图片解码失败</string>
     <string name="biometric_face_enrolling">入库中…</string>
+    <string name="biometric_pick_video">请选择视频…</string>
     <string name="biometric_lib_not_ready">人脸识别未就绪</string>
     <string name="biometric_recognition_not_ready">识别模块未就绪</string>
     <string name="biometric_recognition_detail">识别未就绪：%1$s</string>
     <string name="biometric_init_library">初始化引擎…</string>
     <string name="biometric_init_fail">初始化失败：%1$s</string>
-    <string name="biometric_face_ready">可点击拍照注册</string>
+    <string name="biometric_face_ready">可选相册视频或录制视频注册</string>
     <string name="biometric_opening_camera">打开相机…</string>
     <string name="biometric_face_ok">已注册 faceId=%1$s 质量=%2$.3f</string>
     <string name="biometric_face_ok_toast">已注册 faceId %1$s</string>
@@ -29,10 +30,15 @@
 
     <!-- 与 Android CovBiometricRegisterActivity 对齐 -->
     <string name="biometric_register_title_full">声纹与面部注册</string>
-    <string name="biometric_step1_title">步骤 1 · 拍照注册人脸</string>
-    <string name="biometric_step1_hint">顺序：① 拍照入库并分配 faceId，人脸图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
+    <string name="biometric_step1_title">步骤 1 · 视频注册人脸</string>
+    <string name="biometric_step1_hint">顺序：① 录制或从相册选视频，facedet 多角度抽帧入库并分配 faceId，人脸封面图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
     <string name="biometric_faceid_input_hint">例如 person_1</string>
-    <string name="biometric_faceid_save">拍照并注册人脸</string>
+    <string name="biometric_face_video_gallery">从相册选视频</string>
+    <string name="biometric_face_video_record">录制视频并注册</string>
+    <string name="biometric_face_video_need_cam_mic">录制需要相机与麦克风权限</string>
+    <string name="biometric_video_cancel">已取消录制或未保存视频</string>
+    <string name="biometric_face_cancel_pick">已取消选择</string>
+    <string name="biometric_face_preview_fail">人脸已注册，但无法从视频截取封面图用于上传，请重试或换一段视频</string>
     <string name="biometric_faceid_enrolled_uploading">已注册 faceId=%1$s 质量=%2$.3f，正在上传人脸图…</string>
     <string name="biometric_face_image_upload_fail">人脸图处理或上传失败</string>
     <string name="biometric_face_image_upload_fail_code">人脸图上传失败 code=%d</string>
@@ -53,7 +59,7 @@
     <string name="biometric_voice_recording">录音中…</string>
     <string name="biometric_saved_path">已保存：%s</string>
     <string name="biometric_voice_upload_pending">录音已结束，正在上传声纹…</string>
-    <string name="biometric_gate_step1">请先完成步骤 1：拍照注册并等待人脸图 OSS 成功</string>
+    <string name="biometric_gate_step1">请先完成步骤 1：视频注册并等待人脸图 OSS 成功</string>
     <string name="biometric_gate_step2">请先完成步骤 2：录音并上传声纹 PCM</string>
     <string name="biometric_faceid_mismatch_pcm">faceId 与已注册的不一致</string>
     <string name="biometric_step3_title">步骤 3 · 保存到本地</string>

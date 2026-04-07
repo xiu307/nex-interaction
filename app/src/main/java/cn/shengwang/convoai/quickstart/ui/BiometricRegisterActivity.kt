@@ -5,8 +5,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -20,7 +18,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
-import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.lifecycleScope
 import cn.shengwang.convoai.quickstart.R
 import cn.shengwang.convoai.quickstart.biometric.BiometricRegistrationSnapshot
@@ -35,6 +32,7 @@ import com.robotchat.facedet.FaceDetector
 import com.robotchat.facedet.callback.FrameAnalysisCallback
 import com.robotchat.facedet.model.FaceResult
 import com.robotchat.facedet.recognition.PhotoFaceEnrollment
+import com.robotchat.facedet.recognition.VideoFaceEnrollment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,14 +44,13 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 与 Android `CovBiometricRegisterActivity` 对齐：人脸拍照入库 → 人脸图 OSS → PCM 录音 → PCM OSS → 保存本地 JSON。
+ * 与 Android `CovBiometricRegisterActivity` 对齐：人脸**视频**入库（相册/录制）→ 封面图 OSS → PCM 录音 → PCM OSS → 保存本地 JSON。
  */
 class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>() {
 
     companion object {
         private const val TAG = "BiometricRegister"
         private const val FACE_JPEG_QUALITY = 88
-        private const val DECODE_MAX_SIDE = 1600
         private const val SAMPLE_RATE = 16_000
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
@@ -73,94 +70,49 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             onPermissionsReady()
         } else {
             Toast.makeText(this, getString(R.string.biometric_permission_need), Toast.LENGTH_LONG).show()
-            mBinding?.btnSaveFaceId?.isEnabled = false
+            refreshFaceButtonsEnabled()
             mBinding?.btnVoiceStart?.isEnabled = false
             mBinding?.btnSaveRegistration?.isEnabled = false
         }
     }
 
-    private var photoUri: Uri? = null
+    private var videoCaptureUri: Uri? = null
 
-    private val takePictureLauncher =
-        registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (!success) {
+    private val pickVideoLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) {
                 enrollInProgress = false
-                refreshCaptureButtonEnabled()
-                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_cancel)
+                refreshFaceButtonsEnabled()
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_cancel_pick)
                 return@registerForActivityResult
             }
-            val uri = photoUri ?: run {
+            enrollFromVideoUri(uri)
+        }
+
+    private val captureVideoLauncher =
+        registerForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
+            val uri = videoCaptureUri
+            if (!success || uri == null) {
                 enrollInProgress = false
-                refreshCaptureButtonEnabled()
-                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_internal_error)
+                refreshFaceButtonsEnabled()
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_video_cancel)
                 return@registerForActivityResult
             }
-            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_decoding)
-            val bmp = decodeBitmapMaxSide(uri, DECODE_MAX_SIDE)
-            if (bmp == null) {
-                enrollInProgress = false
-                refreshCaptureButtonEnabled()
-                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_decode_fail)
-                return@registerForActivityResult
-            }
-            mBinding?.previewFace?.setImageBitmap(bmp)
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_enrolling)
+            enrollFromVideoUri(uri)
+        }
 
-            val fd = faceDetector ?: run {
+    private val requestCameraMicForVideoLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val camOk = result[Manifest.permission.CAMERA] == true
+            val micOk = result[Manifest.permission.RECORD_AUDIO] == true
+            if (camOk && micOk) {
+                startVideoCaptureForEnrollment()
+            } else {
                 enrollInProgress = false
-                refreshCaptureButtonEnabled()
-                Toast.makeText(this, getString(R.string.biometric_lib_not_ready), Toast.LENGTH_SHORT).show()
-                bmp.recycle()
-                return@registerForActivityResult
+                refreshFaceButtonsEnabled()
+                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_video_need_cam_mic)
             }
-            val mgr = fd.multiPersonRecognitionManager
-            if (mgr == null) {
-                enrollInProgress = false
-                refreshCaptureButtonEnabled()
-                mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_recognition_not_ready)
-                Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
-                bmp.recycle()
-                return@registerForActivityResult
-            }
-            val uploadCopy = bmp.copy(Bitmap.Config.ARGB_8888, false)
-
-            PhotoFaceEnrollment.enrollFromBitmap(
-                this,
-                bmp,
-                mgr,
-                fd.getConfig(),
-                false,
-                object : PhotoFaceEnrollment.ResultCallback {
-                    override fun onSuccess(faceId: String, isNewUser: Boolean, quality: Float) {
-                        if (isFinishing || isDestroyed) {
-                            uploadCopy.recycle()
-                            return
-                        }
-                        Log.d(TAG, "PhotoFaceEnrollment ok faceId=$faceId new=$isNewUser q=$quality")
-                        enrollInProgress = false
-                        refreshCaptureButtonEnabled()
-                        mBinding?.etFaceId?.setText(faceId)
-                        mBinding?.tvFaceIdStatus?.text = getString(
-                            R.string.biometric_faceid_enrolled_uploading,
-                            faceId,
-                            quality,
-                        )
-                        BiometricSalRegistry.setLastRegisteredFaceId(faceId)
-                        refreshStepGates()
-                        uploadFaceBitmapForFaceId(faceId, uploadCopy)
-                    }
-
-                    override fun onError(message: String) {
-                        uploadCopy.recycle()
-                        if (isFinishing || isDestroyed) return
-                        enrollInProgress = false
-                        refreshCaptureButtonEnabled()
-                        mBinding?.tvFaceIdStatus?.text = message
-                        Toast.makeText(this@BiometricRegisterActivity, message, Toast.LENGTH_LONG).show()
-                        Log.e(TAG, "PhotoFaceEnrollment: $message")
-                    }
-                },
-            )
         }
 
     private var audioRecord: AudioRecord? = null
@@ -190,7 +142,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 tvFaceIdStatus.text = getString(R.string.biometric_faceid_waiting)
             }
             etFaceId.doAfterTextChanged { refreshStepGates() }
-            btnSaveFaceId.setOnClickListener { launchRegisterFacePhotoLikeDemo() }
+            btnFaceFromGallery.setOnClickListener { launchFaceFromGallery() }
+            btnFaceRecord.setOnClickListener { launchFaceRecordVideo() }
             btnVoiceStart.setOnClickListener { startPcmRecording() }
             btnVoiceStop.setOnClickListener { stopPcmRecordingAndUpload() }
             btnSaveRegistration.setOnClickListener { saveRegistrationBundle() }
@@ -263,6 +216,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         refreshStepGates()
         refreshSaveRegistrationStatusText()
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = false)
+        refreshFaceButtonsEnabled()
         Toast.makeText(this, R.string.biometric_clear_registration_ok, Toast.LENGTH_SHORT).show()
     }
 
@@ -369,8 +323,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     }
 
     private fun onPermissionsReady() {
-        mBinding?.btnSaveFaceId?.isEnabled = true
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = true)
+        refreshFaceButtonsEnabled()
         refreshStepGates()
     }
 
@@ -385,6 +339,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             val msg = e.message ?: e.javaClass.simpleName
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_init_fail, msg)
             Toast.makeText(this, getString(R.string.biometric_init_fail, msg), Toast.LENGTH_LONG).show()
+            refreshFaceButtonsEnabled()
             return
         }
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = false)
@@ -406,6 +361,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         } else {
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_ready)
         }
+        refreshFaceButtonsEnabled()
     }
 
     private fun initFaceDetectorIfNeeded() {
@@ -421,7 +377,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         faceDetector = fd
     }
 
-    private fun launchRegisterFacePhotoLikeDemo() {
+    private fun launchFaceFromGallery() {
         if (enrollInProgress) return
         val fd = faceDetector ?: run {
             Toast.makeText(this, getString(R.string.biometric_lib_not_ready), Toast.LENGTH_SHORT).show()
@@ -431,30 +387,141 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
             return
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+        enrollInProgress = true
+        refreshFaceButtonsEnabled()
+        mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_pick_video)
+        pickVideoLauncher.launch(arrayOf("video/*"))
+    }
+
+    private fun launchFaceRecordVideo() {
+        if (enrollInProgress) return
+        val fd = faceDetector ?: run {
+            Toast.makeText(this, getString(R.string.biometric_lib_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (fd.multiPersonRecognitionManager == null) {
+            Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
-        ) {
-            checkPermissions()
+        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!camOk || !micOk) {
+            enrollInProgress = true
+            refreshFaceButtonsEnabled()
+            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_video_need_cam_mic)
+            requestCameraMicForVideoLauncher.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
+            )
             return
         }
         enrollInProgress = true
-        refreshCaptureButtonEnabled()
+        refreshFaceButtonsEnabled()
         mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_opening_camera)
-        val file = File(cacheDir, "reg_face_${System.currentTimeMillis()}.jpg")
+        startVideoCaptureForEnrollment()
+    }
+
+    private fun startVideoCaptureForEnrollment() {
+        val file = File(cacheDir, "biometric_enroll_${System.currentTimeMillis()}.mp4")
         runCatching {
             if (!file.exists()) file.createNewFile()
-        }.onFailure { Log.w(TAG, "createNewFile: ${it.message}") }
+        }.onFailure { Log.w(TAG, "create mp4: ${it.message}") }
         val uri = FileProvider.getUriForFile(
             this,
             "${packageName}.fileprovider",
             file,
         )
-        photoUri = uri
-        takePictureLauncher.launch(uri)
+        videoCaptureUri = uri
+        runCatching {
+            captureVideoLauncher.launch(uri)
+        }.onFailure { e ->
+            Log.e(TAG, "CaptureVideo launch failed", e)
+            enrollInProgress = false
+            refreshFaceButtonsEnabled()
+            mBinding?.tvFaceIdStatus?.text = e.message ?: "CaptureVideo failed"
+        }
     }
 
-    private fun refreshCaptureButtonEnabled() {
-        mBinding?.btnSaveFaceId?.isEnabled = !enrollInProgress
+    private fun enrollFromVideoUri(uri: Uri) {
+        val fd = faceDetector ?: run {
+            enrollInProgress = false
+            refreshFaceButtonsEnabled()
+            Toast.makeText(this, getString(R.string.biometric_lib_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val mgr = fd.multiPersonRecognitionManager
+        if (mgr == null) {
+            enrollInProgress = false
+            refreshFaceButtonsEnabled()
+            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_recognition_not_ready)
+            Toast.makeText(this, getString(R.string.biometric_recognition_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_enrolling)
+        VideoFaceEnrollment.enrollFromVideo(
+            this,
+            uri,
+            mgr,
+            fd.getConfig(),
+            false,
+            object : VideoFaceEnrollment.ProgressCallback {
+                override fun onProgress(current: Int, total: Int, stage: String) {
+                    runOnUiThread { mBinding?.tvFaceIdStatus?.text = stage }
+                }
+            },
+            object : PhotoFaceEnrollment.ResultCallback {
+                override fun onSuccess(faceId: String, isNewUser: Boolean, quality: Float) {
+                    if (isFinishing || isDestroyed) return
+                    Log.d(TAG, "VideoFaceEnrollment ok faceId=$faceId new=$isNewUser q=$quality")
+                    val rawPreview = VideoFaceEnrollment.extractPreviewFrame(this@BiometricRegisterActivity, uri)
+                    val uploadCopy = rawPreview?.copy(Bitmap.Config.ARGB_8888, false)
+                    rawPreview?.recycle()
+                    enrollInProgress = false
+                    refreshFaceButtonsEnabled()
+                    mBinding?.etFaceId?.setText(faceId)
+                    mBinding?.tvFaceIdStatus?.text = getString(
+                        R.string.biometric_faceid_enrolled_uploading,
+                        faceId,
+                        quality,
+                    )
+                    BiometricSalRegistry.setLastRegisteredFaceId(faceId)
+                    refreshStepGates()
+                    if (uploadCopy == null) {
+                        Toast.makeText(
+                            this@BiometricRegisterActivity,
+                            R.string.biometric_face_preview_fail,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        return
+                    }
+                    val displayCopy = uploadCopy.copy(Bitmap.Config.ARGB_8888, false)
+                    mBinding?.previewFace?.setImageBitmap(displayCopy)
+                    uploadFaceBitmapForFaceId(faceId, uploadCopy)
+                }
+
+                override fun onError(message: String) {
+                    if (isFinishing || isDestroyed) return
+                    enrollInProgress = false
+                    refreshFaceButtonsEnabled()
+                    mBinding?.tvFaceIdStatus?.text = message
+                    Toast.makeText(this@BiometricRegisterActivity, message, Toast.LENGTH_LONG).show()
+                    Log.e(TAG, "VideoFaceEnrollment: $message")
+                }
+            },
+        )
+    }
+
+    private fun refreshFaceButtonsEnabled() {
+        val m = mBinding ?: return
+        val mgrReady = faceDetector?.multiPersonRecognitionManager != null
+        val base = !enrollInProgress && mgrReady
+        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        m.btnFaceFromGallery.isEnabled = base
+        m.btnFaceRecord.isEnabled = base && camOk && micOk
     }
 
     private fun uploadFaceBitmapForFaceId(faceKey: String, bitmap: Bitmap) {
@@ -791,50 +858,4 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         audioRecord = null
     }
 
-    private fun decodeBitmapMaxSide(uri: Uri, maxSide: Int): Bitmap? {
-        val decoded = contentResolver.openInputStream(uri)?.use { input ->
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeStream(input, null, bounds)
-            var sample = 1
-            val w = bounds.outWidth
-            val h = bounds.outHeight
-            if (w <= 0 || h <= 0) return@use null
-            val maxDim = maxOf(w, h)
-            while (maxDim / sample > maxSide) {
-                sample *= 2
-            }
-            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-            contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, opts)
-            }
-        } ?: return null
-        return applyExifOrientation(uri, decoded)
-    }
-
-    private fun applyExifOrientation(uri: Uri, bitmap: Bitmap): Bitmap {
-        val rotation = try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                val exif = ExifInterface(input)
-                when (
-                    exif.getAttributeInt(
-                        ExifInterface.TAG_ORIENTATION,
-                        ExifInterface.ORIENTATION_NORMAL,
-                    )
-                ) {
-                    ExifInterface.ORIENTATION_ROTATE_90 -> 90
-                    ExifInterface.ORIENTATION_ROTATE_180 -> 180
-                    ExifInterface.ORIENTATION_ROTATE_270 -> 270
-                    else -> 0
-                }
-            } ?: 0
-        } catch (_: Exception) {
-            0
-        }
-        if (rotation == 0) return bitmap
-        val m = Matrix()
-        m.postRotate(rotation.toFloat())
-        val out = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
-        if (out != bitmap) bitmap.recycle()
-        return out
-    }
 }
