@@ -579,6 +579,7 @@ class AgentChatViewModel : ViewModel() {
         viewModelScope.launch {
             if (agentId != null) {
                 Log.d(TAG, "Agent already started, agentId: $agentId")
+                addStatusLog("Agent already started, agentId=$agentId")
                 return@launch
             }
 
@@ -641,7 +642,7 @@ class AgentChatViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(
                         connectionState = ConnectionState.Connected
                     )
-                    addStatusLog("Agent start successfully")
+                    addStatusLog("Agent start successfully, agentId=$agentId")
                     Log.d(TAG, "Agent started successfully, agentId: $agentId")
                     Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
                 },
@@ -909,17 +910,19 @@ class AgentChatViewModel : ViewModel() {
 
                 // Stop agent if it was started
                 if (agentId != null) {
+                    val stoppedAgentId = agentId!!
                     val stopResult = AgentStarter.stopAgentAsync(
-                        agentId = agentId!!,
+                        agentId = stoppedAgentId,
                         authToken = authToken ?: ""
                     )
                     stopResult.fold(
                         onSuccess = {
-                            Log.d(TAG, "Agent stopped successfully")
-                            addStatusLog("Agent stopped successfully")
+                            Log.d(TAG, "Agent stopped successfully, agentId=$stoppedAgentId")
+                            addStatusLog("Agent stopped successfully, agentId=$stoppedAgentId")
                         },
                         onFailure = { exception ->
                             Log.e(TAG, "Failed to stop agent: ${exception.message}", exception)
+                            addStatusLog("Agent stop failed, agentId=$stoppedAgentId: ${exception.message}")
                         }
                     )
                     agentId = null

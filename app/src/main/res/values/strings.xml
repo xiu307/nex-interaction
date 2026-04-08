@@ -103,4 +103,8 @@
     <string name="biometric_sal_ready_yes">是（双 http）</string>
     <string name="biometric_sal_ready_no">否（需 OSS 上传成功）</string>
     <string name="biometric_auto_snapshot_synced">已自动写入本地快照与 biometric_registration.json（双 OSS 成功）</string>
+
+    <string name="agent_chat_copy_log">复制日志</string>
+    <string name="agent_chat_log_copied">已复制到剪贴板</string>
+    <string name="agent_chat_log_empty">暂无日志可复制</string>
 </resources>

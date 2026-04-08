@@ -32,6 +32,8 @@ object AgentStarter {
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val SAL_LAB_PCM_URL_SPEAKER1 = "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
     private const val SAL_LAB_PCM_URL_SPEAKER2 = "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
+    /** join 请求体 `turn_detection.config.start_of_speech.vad_config.speaking_interrupt_duration_ms` 默认值 */
+    private const val DEFAULT_SPEAKING_INTERRUPT_DURATION_MS = 480
     private val okHttpClient: OkHttpClient by lazy {
         SecureOkHttpClient.create()
             .build()
@@ -66,6 +68,7 @@ object AgentStarter {
                 remoteRtcUids = listOf(remoteRtcUid)
             )
 
+            Log.d("requestBody",requestBody.toString())
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Content-Type", JSON_MEDIA_TYPE)
@@ -142,9 +145,7 @@ object AgentStarter {
                     put("sample_urls", sampleUrlsJson)
                 })
 
-                put("turn_detection", JSONObject().apply {
-                    put("interrupt_mode", "adaptive")
-                })
+                put("turn_detection", buildTurnDetectionJson())
 
                 put("parameters", JSONObject().apply {
                     put("data_channel", "rtm")
@@ -264,6 +265,21 @@ object AgentStarter {
                 put("params", raw)
             }
         }
+    }
+
+    /**
+     * 构建 `properties.turn_detection`：`config` → `start_of_speech` → `vad_config` → `speaking_interrupt_duration_ms`。
+     */
+    private fun buildTurnDetectionJson(
+        speakingInterruptDurationMs: Int = DEFAULT_SPEAKING_INTERRUPT_DURATION_MS,
+    ): JSONObject = JSONObject().apply {
+        put("config", JSONObject().apply {
+            put("start_of_speech", JSONObject().apply {
+                put("vad_config", JSONObject().apply {
+                    put("speaking_interrupt_duration_ms", speakingInterruptDurationMs)
+                })
+            })
+        })
     }
 
     /**

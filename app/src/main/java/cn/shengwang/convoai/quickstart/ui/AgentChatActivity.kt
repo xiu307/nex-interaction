@@ -1,6 +1,9 @@
 package cn.shengwang.convoai.quickstart.ui
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -234,7 +237,26 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             tvBiometricRegister.setOnClickListener {
                 BiometricRegisterActivity.start(this@AgentChatActivity)
             }
+
+            btnCopyLog.setOnClickListener { copyDebugLogToClipboard() }
+            tvLog.setOnLongClickListener {
+                copyDebugLogToClipboard()
+                true
+            }
         }
+    }
+
+    /** 复制上方调试日志（纯文本，含 agentId 等），便于粘贴到 IM / 工单。 */
+    private fun copyDebugLogToClipboard() {
+        val lines = viewModel.debugLogList.value
+        if (lines.isEmpty()) {
+            Toast.makeText(this, getString(R.string.agent_chat_log_empty), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val text = lines.joinToString("\n")
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("agent_debug_log", text))
+        Toast.makeText(this, getString(R.string.agent_chat_log_copied), Toast.LENGTH_SHORT).show()
     }
 
     private fun checkMediaPermissions(granted: (Boolean) -> Unit) {
