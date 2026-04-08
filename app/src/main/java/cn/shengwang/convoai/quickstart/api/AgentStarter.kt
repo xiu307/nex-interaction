@@ -23,8 +23,6 @@ import org.json.JSONObject
  */
 object AgentStarter {
     private const val TAG = "AgentStarter"
-    /** 短标签，便于 `adb logcat -s SAL:I`（部分机型对 AgentStarter 过滤异常） */
-    private const val TAG_SAL = "SAL"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     /** 实验室预置声纹（SAL sample_urls 键与 PCM URL） */
@@ -32,8 +30,10 @@ object AgentStarter {
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val SAL_LAB_PCM_URL_SPEAKER1 = "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
     private const val SAL_LAB_PCM_URL_SPEAKER2 = "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
-    /** join 请求体 `turn_detection.config.start_of_speech.vad_config.speaking_interrupt_duration_ms` 默认值 */
-    private const val DEFAULT_SPEAKING_INTERRUPT_DURATION_MS = 480
+    /** `turn_detection.config.start_of_speech.mode` */
+    private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
+    /** `turn_detection.config.start_of_speech.disabled_config.strategy` */
+    private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
     private val okHttpClient: OkHttpClient by lazy {
         SecureOkHttpClient.create()
             .build()
@@ -68,7 +68,6 @@ object AgentStarter {
                 remoteRtcUids = listOf(remoteRtcUid)
             )
 
-            Log.d("requestBody",requestBody.toString())
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Content-Type", JSON_MEDIA_TYPE)
@@ -133,16 +132,12 @@ object AgentStarter {
 
                 put("tts", buildTtsJson())
 
-                val sampleUrlsJson = buildSalSampleUrlsJson(
-                    KeyCenter.SAL_ENABLE_PERSONALIZED,
-                    deviceId.toString(),
-                )
-                val salPretty = sampleUrlsJson.toString(2)
-                Log.i(TAG, "SAL sample_urls (${sampleUrlsJson.length()} keys, uidStr=$deviceId):\n$salPretty")
-                Log.i(TAG_SAL, salPretty)
                 put("sal", JSONObject().apply {
                     put("sal_mode", "recognition")
-                    put("sample_urls", sampleUrlsJson)
+                    put("sample_urls", buildSalSampleUrlsJson(
+                        KeyCenter.SAL_ENABLE_PERSONALIZED,
+                        deviceId.toString(),
+                    ))
                 })
 
                 put("turn_detection", buildTurnDetectionJson())
@@ -268,15 +263,14 @@ object AgentStarter {
     }
 
     /**
-     * 构建 `properties.turn_detection`：`config` → `start_of_speech` → `vad_config` → `speaking_interrupt_duration_ms`。
+     * 构建 `properties.turn_detection`：`config.start_of_speech` 为 disabled + ignore 策略（无 VAD 毫秒配置）。
      */
-    private fun buildTurnDetectionJson(
-        speakingInterruptDurationMs: Int = DEFAULT_SPEAKING_INTERRUPT_DURATION_MS,
-    ): JSONObject = JSONObject().apply {
+    private fun buildTurnDetectionJson(): JSONObject = JSONObject().apply {
         put("config", JSONObject().apply {
             put("start_of_speech", JSONObject().apply {
-                put("vad_config", JSONObject().apply {
-                    put("speaking_interrupt_duration_ms", speakingInterruptDurationMs)
+                put("mode", START_OF_SPEECH_MODE_DISABLED)
+                put("disabled_config", JSONObject().apply {
+                    put("strategy", START_OF_SPEECH_DISABLED_STRATEGY_IGNORE)
                 })
             })
         })
