@@ -5,6 +5,9 @@
 .gradle/
 build/
 
+# 打包输出（assemble 后复制带时间戳的 APK，见 app/build.gradle.kts）
+dist-apk/
+
 # Local configuration file (sdk path, etc)
 local.properties
 /.idea/

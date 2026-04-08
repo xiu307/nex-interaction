@@ -1,3 +1,7 @@
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -164,6 +168,26 @@ android {
             val facedetGeneratedAssets = rootProject.file("../face-detc-java/facedet/build/generated/facedetAssets/assets")
             if (facedetGeneratedAssets.isDirectory) {
                 assets.srcDirs(facedetGeneratedAssets)
+            }
+        }
+    }
+}
+
+/**
+ * 每次 assemble 成功后，将生成的 APK 复制到仓库根目录 [dist-apk]，文件名追加构建时刻时间戳（精确到秒）。
+ */
+android.applicationVariants.configureEach {
+    val variantName = name
+    tasks.named("assemble${variantName.replaceFirstChar { it.uppercaseChar() }}").configure {
+        doLast {
+            val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val destDir = rootProject.layout.projectDirectory.dir("dist-apk").asFile
+            destDir.mkdirs()
+            val apkOutDir = layout.buildDirectory.dir("outputs/apk/$variantName").get().asFile
+            if (!apkOutDir.isDirectory) return@doLast
+            apkOutDir.listFiles { _, fileName -> fileName.endsWith(".apk") }?.forEach { apk ->
+                val destName = "${apk.nameWithoutExtension}-$timestamp.apk"
+                apk.copyTo(File(destDir, destName), overwrite = true)
             }
         }
     }
