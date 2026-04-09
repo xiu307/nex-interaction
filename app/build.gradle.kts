@@ -3,6 +3,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.Properties
+import org.gradle.api.Project
+import org.gradle.api.Task
 
 plugins {
     alias(libs.plugins.android.application)
@@ -174,21 +176,41 @@ android {
 }
 
 /**
- * 每次 assemble 成功后，将生成的 APK 复制到仓库根目录 [dist-apk]，文件名追加构建时刻时间戳（精确到秒）。
+ * 将 [variantName] 对应目录下已生成的 APK 复制到仓库根目录 [dist-apk]，文件名追加当前时间戳（秒级）。
+ * 供 **package**（打包）与 **install**（Android Studio 运行/安装，走 install* 任务）共用。
  */
+fun copyVariantApksToDist(project: Project, variantName: String) {
+    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+    val destDir = project.rootProject.layout.projectDirectory.dir("dist-apk").asFile
+    destDir.mkdirs()
+    val apkOutDir = project.layout.buildDirectory.dir("outputs/apk/$variantName").get().asFile
+    if (!apkOutDir.isDirectory) return
+    apkOutDir.listFiles { _, fileName -> fileName.endsWith(".apk") }?.forEach { apk ->
+        val destName = "${apk.nameWithoutExtension}-$timestamp.apk"
+        apk.copyTo(File(destDir, destName), overwrite = true)
+    }
+}
+
+/**
+ * - **package***：每次重新打出 APK 后复制到 dist-apk。
+ * - **install***：每次点击 Run/安装（执行 installDebug 等）后同样复制；若本次仅安装、package 为 UP-TO-DATE，仍会按「安装时刻」再生成一份带时间戳的副本。
+ */
+@Suppress("DEPRECATION")
 android.applicationVariants.configureEach {
     val variantName = name
-    tasks.named("assemble${variantName.replaceFirstChar { it.uppercaseChar() }}").configure {
-        doLast {
-            val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-            val destDir = rootProject.layout.projectDirectory.dir("dist-apk").asFile
-            destDir.mkdirs()
-            val apkOutDir = layout.buildDirectory.dir("outputs/apk/$variantName").get().asFile
-            if (!apkOutDir.isDirectory) return@doLast
-            apkOutDir.listFiles { _, fileName -> fileName.endsWith(".apk") }?.forEach { apk ->
-                val destName = "${apk.nameWithoutExtension}-$timestamp.apk"
-                apk.copyTo(File(destDir, destName), overwrite = true)
-            }
+    packageApplicationProvider.configure {
+        doLast { copyVariantApksToDist(project, variantName) }
+    }
+}
+
+/** install* 在配置阶段可能尚未注册，延后绑定，保证 Android Studio「运行/安装」也会复制到 dist-apk。 */
+afterEvaluate {
+    @Suppress("DEPRECATION")
+    android.applicationVariants.configureEach {
+        val variantName = name
+        val installTaskName = "install${variantName.replaceFirstChar { it.uppercaseChar() }}"
+        tasks.findByName(installTaskName)?.let { t: Task ->
+            t.doLast { copyVariantApksToDist(project, variantName) }
         }
     }
 }
