@@ -246,7 +246,7 @@ To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`. St
 4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server
 5. **Resource Cleanup**: RTC/RTM resources fully released in `hangup()` and `onCleared()`; ConversationalAIAPI released via `destroy()`
 6. **Permissions**: Requires `RECORD_AUDIO` and `INTERNET` permissions
-7. **ConversationalAIAPI is read-only**: All files under `convoaiApi/` are standalone components — **do not modify directly**. To use in other projects, copy the entire `convoaiApi/` directory. See `convoaiApi/README.md` for usage
+7. **Vendor ConversationalAI 解析层**: 源码位于 `app/src/main/java/ai/nex/interaction/vendor/convoai/`（由原 `io.agora.convoai.convoaiApi` 迁入）。与声网示例对齐时可整体替换；业务侧只通过 `ai.nex.interaction.convoai` 桥接接入。详见 `vendor/convoai/README.md`
 8. **Audio Settings**: `loadAudioSettings()` must be called before `joinChannel()`; Avatar mode uses `AUDIO_SCENARIO_DEFAULT`
 
 ## File Naming

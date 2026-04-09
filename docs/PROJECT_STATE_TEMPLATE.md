@@ -59,7 +59,7 @@ CURRENT_ROLE: single
 
 - Scope: <本轮允许执行的范围，例如“仅修复登录失败提示错误”或“仅同步 AGENTS.md / skills / templates 的 workflow 规则”>
 - Files to change: <允许修改的文件/目录或模块，例如 `app/`, `docs/`, `.agents/skills/`, `AGENTS.md`, `build.gradle.kts`, `settings.gradle.kts`>
-- Forbidden: <明确禁止的行为或改动，例如“不升级 AGP/Kotlin；不修改无关模块；不改 `app/src/main/java/io/agora/convoai/convoaiApi/`；不调整无关 workflow 规范”>
+- Forbidden: <明确禁止的行为或改动，例如“不升级 AGP/Kotlin；不修改无关模块；慎改 `app/src/main/java/ai/nex/interaction/vendor/convoai/`；不调整无关 workflow 规范”>
 - Steps: <执行步骤（有序）>
 - Checks: <代码任务写 `lint / test / assemble`；docs-only 任务写路径 / 术语 / 模板一致性检查>
 - Commit plan: <提交策略或“本轮不提交”>

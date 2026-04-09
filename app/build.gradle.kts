@@ -73,7 +73,7 @@ fun resolveOssStsTokenUrlForBuild(): String {
 }
 
 android {
-    namespace = "cn.shengwang.convoai.quickstart"
+    namespace = "ai.nex.interaction"
     compileSdk = 36
 
     buildFeatures {
@@ -82,7 +82,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "cn.shengwang.convoai.quickstart.kotlin"
+        applicationId = "ai.nex.interaction"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

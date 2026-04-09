@@ -14,7 +14,7 @@
 - 每次阶段结束必须更新 `PROJECT_STATE.md`
 - 纯文档 / skill / template 任务也属于 workflow，不按 general 模式处理
 - 代码任务优先跑 `gradlew` 检查；docs-only 任务优先做路径、术语、模板一致性检查
-- 触及 `app/src/main/java/io/agora/convoai/convoaiApi/` 或 Agent 启动链路（`app/src/main/java/cn/shengwang/convoai/quickstart/api/`）时，默认按高风险处理，扩大验证范围
+- 触及 `app/src/main/java/ai/nex/interaction/vendor/convoai/` 或 Agent 启动链路（`app/src/main/java/ai/nex/interaction/api/`）时，默认按高风险处理，扩大验证范围
 
 ---
 
@@ -85,7 +85,7 @@
 ### 入口分流
 
 1. 是否改变外部行为、数据结构或对外接口？
-2. 是否跨 `app/src/main/java/cn/shengwang/convoai/quickstart/{ui,api,tools}`、`KeyCenter.kt` 与 `app/src/main/java/io/agora/convoai/convoaiApi/` 等边界？
+2. 是否跨 `app/src/main/java/ai/nex/interaction/{ui,api,tools}`、`KeyCenter.kt` 与 `app/src/main/java/ai/nex/interaction/vendor/convoai/` 等边界？
 3. 是否需要分阶段推进、保留兼容层或拆成多次提交？
 
 ### 最小问题集

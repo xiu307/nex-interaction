@@ -34,21 +34,21 @@ The Activity page is intentionally single-page and is organized into these regio
 
 ```text
 app/src/main/java/
-├── cn/shengwang/convoai/quickstart/
+├── ai/nex/interaction/
 │   ├── ui/            # AgentChatActivity + ViewModel + dialogs + base classes
 │   ├── session/       # 会话身份、Connection/Agent 状态、用户统一 Token（ConversationUserTokenLoader）、Agent REST 编排、RTM 对端常量等
 │   ├── transcript/    # TranscriptListUpsert（转录列表 upsert 纯函数）
 │   ├── rtc/             # 发布选项、进房封装（ConversationRtcJoinHelper）、引擎 Config/扩展、IRtcEngineEventHandler 桥接
 │   ├── video/           # ExternalVideoCaptureManager、自定义视频发布（ConversationExternalVideoPublishController）
 │   ├── rtm/             # RtmConfig、登录状态机、链路 Listener 桥接（ConversationRtmEventListener）
-│   ├── convoai/         # ConversationalAIAPI 事件 Sink、默认适配（DefaultConversationConvoAiEventSink）、桥接
+│   ├── convoai/         # 业务桥接：事件 Sink、DefaultConversationConvoAiEventSink、对接 vendor 协议层
+│   ├── vendor/
+│   │   └── convoai/     # 厂商协议/解析（原 io.agora.convoai.convoaiApi）：RTM 载荷、转写、Agent 状态回调
 │   ├── biometric/     # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调（RobotFaceSpeakerBindCoordinator）等
 │   ├── api/           # AgentStarter + TokenGenerator + OkHttp config
 │   ├── tools/         # Permission helpers、DebugStatusLogList（调试日志条数上限与追加）
 │   ├── KeyCenter.kt
 │   └── AgentApp.kt
-└── io/agora/convoai/convoaiApi/
-    └── ...            # Read-only RTM parsing / transcript component
 ```
 
 ## Runtime Shape
@@ -58,7 +58,7 @@ AgentChatActivity / AgentChatViewModel /
 RTC / RTM / ConversationalAIAPI / TokenGenerator / AgentStarter
 ```
 
-`convoaiApi/` is a read-only module that parses RTM payloads and emits agent / transcript callbacks.
+`vendor/convoai/` 承载原 ConversationalAIAPI 解析逻辑，解析 RTM 并回调 Agent/转写；业务监听见 `ai.nex.interaction.convoai`。
 
 ## Connection Flow (User taps Start Agent)
 
@@ -169,4 +169,4 @@ Current default inline pipeline:
 
 - This is a demo; token generation and agent startup are client-side for convenience
 - Production should move token generation and REST startup to a backend
-- `convoaiApi/` should be copied as-is and not modified in place
+- `vendor/convoai/` 可与上游示例对齐整体拷贝；本仓库内若需改协议解析，优先在此包演进并保留变更说明
