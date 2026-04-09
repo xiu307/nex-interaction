@@ -39,7 +39,7 @@ app/src/main/java/
 │   ├── session/       # ConversationSessionIdentity、ConversationRtmPeers（RTM 对端 ID / 日志标签）
 │   ├── transcript/    # TranscriptListUpsert（转录列表 upsert 纯函数）
 │   ├── api/           # AgentStarter + TokenGenerator + OkHttp config
-│   ├── tools/         # Permission helpers
+│   ├── tools/         # Permission helpers、DebugStatusLogList（调试日志条数上限与追加）
 │   ├── KeyCenter.kt
 │   └── AgentApp.kt
 └── io/agora/convoai/convoaiApi/

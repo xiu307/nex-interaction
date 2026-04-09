@@ -53,6 +53,7 @@ import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
 import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
 import cn.shengwang.convoai.quickstart.session.ConversationRtmPeers
 import cn.shengwang.convoai.quickstart.session.ConversationSessionIdentity
+import cn.shengwang.convoai.quickstart.tools.appendDebugStatusLine
 import cn.shengwang.convoai.quickstart.transcript.upsertTranscript
 
 /**
@@ -751,22 +752,10 @@ class AgentChatViewModel : ViewModel() {
     private fun addStatusLog(message: String) {
         if (message.isEmpty()) return
         viewModelScope.launch {
-            val currentLogs = _debugLogList.value.toMutableList()
-            currentLogs.add(message)
-            if (currentLogs.size > 20) {
-                currentLogs.removeAt(0)
-            }
-            _debugLogList.value = currentLogs
+            _debugLogList.value = _debugLogList.value.appendDebugStatusLine(message)
         }
     }
 
-    /**
-     * Hang up and cleanup connections
-     */
-    /**
-     * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
-     * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
-     */
     /**
      * 与 join 请求体 `remoteRtcUid` / `llm.params.lables.userName` 一致；
      * [ROBOT_FACE_SPEAKER_BIND]、[ROBOT_FACE_INFO_UP] 顶层 `clientId` 及 facedet [FaceDetectorConfig.deviceId] 均用此值。
@@ -833,6 +822,10 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
+     * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
+     */
     fun refreshRobotFaceRtmUplink(activity: AppCompatActivity) {
         if (_uiState.value.connectionState != ConnectionState.Connected) {
             FaceRtmStreamPublisher.stopAll()
@@ -852,6 +845,7 @@ class AgentChatViewModel : ViewModel() {
         )
     }
 
+    /** 挂断：停止 Agent、取消 RTM 订阅、离开 RTC 并清理会话状态。 */
     fun hangup() {
         viewModelScope.launch {
             try {
