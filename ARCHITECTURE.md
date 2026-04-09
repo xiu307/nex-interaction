@@ -36,6 +36,7 @@ The Activity page is intentionally single-page and is organized into these regio
 app/src/main/java/
 ├── cn/shengwang/convoai/quickstart/
 │   ├── ui/            # AgentChatActivity + ViewModel + dialogs + base classes
+│   ├── session/       # ConversationSessionIdentity（本地 userId / agentUid / 随机 channel）
 │   ├── api/           # AgentStarter + TokenGenerator + OkHttp config
 │   ├── tools/         # Permission helpers
 │   ├── KeyCenter.kt

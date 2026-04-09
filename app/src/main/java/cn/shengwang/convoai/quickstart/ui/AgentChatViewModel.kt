@@ -1,7 +1,6 @@
 package cn.shengwang.convoai.quickstart.ui
 
 import android.Manifest
-import android.content.Context
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.ViewModel
@@ -48,11 +47,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
 import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
 import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
 import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
+import cn.shengwang.convoai.quickstart.session.ConversationSessionIdentity
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -65,50 +64,12 @@ class AgentChatViewModel : ViewModel() {
         private const val GEELY_RTM_PEER_USER_ID = "geely_rtm_server"
         /** `adb logcat -s SPEAKER_BIND` */
         private const val LOG_SPEAKER_BIND = "SPEAKER_BIND"
-        private const val USER_PREFS_NAME = "agent_chat_prefs"
-        private const val KEY_LOCAL_USER_ID = "local_user_id"
-        private const val INVALID_UID = -1
-        val userId = getOrCreateLocalUserId()
-        val agentUid: Int = generateUniqueUid(userId)
 
-        private fun getOrCreateLocalUserId(): Int {
-            val sharedPreferences = AgentApp.instance().getSharedPreferences(
-                USER_PREFS_NAME,
-                Context.MODE_PRIVATE
-            )
-            val cachedUserId = sharedPreferences.getInt(KEY_LOCAL_USER_ID, INVALID_UID)
-            if (cachedUserId != INVALID_UID) {
-                return cachedUserId
-            }
+        val userId: Int = ConversationSessionIdentity.userId
+        val agentUid: Int = ConversationSessionIdentity.agentUid
 
-            val newUserId = generateRandomUid()
-            sharedPreferences.edit {
-                putInt(KEY_LOCAL_USER_ID, newUserId)
-            }
-            return newUserId
-        }
-
-        /**
-         * Generate a unique UID that doesn't conflict with the given uid
-         */
-        private fun generateUniqueUid(excludeUid: Int): Int {
-            var uid: Int
-            do {
-                uid = generateRandomUid()
-            } while (uid == excludeUid)
-            return uid
-        }
-
-        private fun generateRandomUid(): Int {
-            return (100000..999999).random()
-        }
-
-        /**
-         * Generate a random channel name
-         */
-        fun generateRandomChannelName(): String {
-            return "channel_kotlin_${generateRandomUid()}"
-        }
+        fun generateRandomChannelName(): String =
+            ConversationSessionIdentity.generateRandomChannelName()
     }
 
     /**
