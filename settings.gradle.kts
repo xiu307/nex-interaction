@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-kotlin"
 include(":app")
- 
+include(":agroacore")

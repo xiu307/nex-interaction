@@ -1,4 +1,4 @@
-package ai.nex.interaction.audio
+package ai.conv.internal.audio
 
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngineEx

@@ -33,22 +33,26 @@ The Activity page is intentionally single-page and is organized into these regio
 ## Project Structure
 
 ```text
+agroacore/src/main/java/
+└── ai/conv/internal/
+    ├── rtc/          # 发布选项、进房封装、引擎 Config/扩展、IRtcEngineEventHandler 桥接
+    ├── rtm/          # RtmConfig、登录状态机、链路 Listener 桥接
+    ├── audio/        # CustomAudioInputManager、MicrophoneAudioCaptureManager
+    ├── video/        # ExternalVideoCaptureManager
+    └── convoai/      # 厂商协议/解析（原 io.agora.convoai.convoaiApi）：RTM 载荷、转写、Agent 状态回调
+
 app/src/main/java/
-├── ai/nex/interaction/
-│   ├── ui/            # AgentChatActivity + ViewModel + dialogs + base classes
-│   ├── session/       # 会话身份、Connection/Agent 状态、用户统一 Token（ConversationUserTokenLoader）、Agent REST 编排、RTM 对端常量等
-│   ├── transcript/    # TranscriptListUpsert（转录列表 upsert 纯函数）
-│   ├── rtc/             # 发布选项、进房封装（ConversationRtcJoinHelper）、引擎 Config/扩展、IRtcEngineEventHandler 桥接
-│   ├── video/           # ExternalVideoCaptureManager、自定义视频发布（ConversationExternalVideoPublishController）
-│   ├── rtm/             # RtmConfig、登录状态机、链路 Listener 桥接（ConversationRtmEventListener）
-│   ├── convoai/         # 业务桥接：事件 Sink、DefaultConversationConvoAiEventSink、对接 vendor 协议层
-│   ├── vendor/
-│   │   └── convoai/     # 厂商协议/解析（原 io.agora.convoai.convoaiApi）：RTM 载荷、转写、Agent 状态回调
-│   ├── biometric/     # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调（RobotFaceSpeakerBindCoordinator）等
-│   ├── api/           # AgentStarter + TokenGenerator + OkHttp config
-│   ├── tools/         # Permission helpers、DebugStatusLogList（调试日志条数上限与追加）
-│   ├── KeyCenter.kt
-│   └── AgentApp.kt
+└── ai/nex/interaction/
+    ├── ui/           # AgentChatActivity + ViewModel + dialogs + base classes
+    ├── session/      # 会话身份、Connection/Agent 状态、用户统一 Token、Agent REST 编排、RTM 对端常量等
+    ├── transcript/   # TranscriptListUpsert（转录列表 upsert 纯函数）
+    ├── video/        # 自定义视频发布控制器、CameraX 示例输入
+    ├── convoai/      # 业务桥接：事件 Sink、DefaultConversationConvoAiEventSink，对接 agroacore 协议层
+    ├── biometric/    # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调等
+    ├── api/          # AgentStarter + TokenGenerator + OkHttp config
+    ├── tools/        # Permission helpers、DebugStatusLogList
+    ├── KeyCenter.kt
+    └── AgentApp.kt
 ```
 
 ## Runtime Shape
@@ -58,7 +62,7 @@ AgentChatActivity / AgentChatViewModel /
 RTC / RTM / ConversationalAIAPI / TokenGenerator / AgentStarter
 ```
 
-`vendor/convoai/` 承载原 ConversationalAIAPI 解析逻辑，解析 RTM 并回调 Agent/转写；业务监听见 `ai.nex.interaction.convoai`。
+`agroacore` 承载 RTC / RTM / ConversationalAIAPI 运行时内核；其中 `ai.conv.internal.convoai` 负责解析 RTM 并回调 Agent/转写，业务监听桥接仍在 `ai.nex.interaction.convoai`。
 
 ## Connection Flow (User taps Start Agent)
 
@@ -169,4 +173,4 @@ Current default inline pipeline:
 
 - This is a demo; token generation and agent startup are client-side for convenience
 - Production should move token generation and REST startup to a backend
-- `vendor/convoai/` 可与上游示例对齐整体拷贝；本仓库内若需改协议解析，优先在此包演进并保留变更说明
+- `agroacore/src/main/java/ai/conv/internal/convoai/` 可与上游示例对齐整体拷贝；本仓库内若需改协议解析，优先在此包演进并保留变更说明

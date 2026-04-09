@@ -26,7 +26,7 @@
     - [IConversationalAIAPI.kt](IConversationalAIAPI.kt)
     - [ConversationalAIUtils.kt](ConversationalAIUtils.kt)
 
-   > 本仓库已使用包名 `ai.nex.interaction.vendor.convoai`；从声网示例拷贝时请将包名统一为该结构或按需替换 `import`。
+   > 本仓库当前 SDK 内包名为 `ai.conv.internal.convoai`；从声网示例拷贝时请将包名统一为该结构或按需替换 `import`。
 
 2. 确保你的项目已集成 Agora RTC/RTM，且 RTC 版本为 **4.5.1 及以上**。
 

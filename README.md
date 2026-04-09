@@ -153,7 +153,7 @@ cd conversational-ai-quickstart-native/android-kotlin
 - `AgentChatViewModel.kt`：业务逻辑层，包含 RTC 引擎、RTM 客户端的管理和 Agent 启动逻辑
 - `AgentStarter.kt`：Agent 启动 API 封装，使用 `agora token=<token>` 认证模式，内联 Fengming/Qwen/Volcengine pipeline 配置
 - `TokenGenerator.kt`：Token 生成工具（仅用于开发测试，生产环境需使用服务端生成）
-- `ai/nex/interaction/vendor/convoai/`：声网 ConversationalAIAPI 协议/解析层（可与上游示例对齐替换）
+- `agroacore/src/main/java/ai/conv/internal/convoai/`：声网 ConversationalAIAPI 协议/解析层（第一阶段已抽到 SDK，可与上游示例对齐替换）
 
 ## License
 

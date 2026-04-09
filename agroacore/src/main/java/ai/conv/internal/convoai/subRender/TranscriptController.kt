@@ -1,4 +1,4 @@
-package ai.nex.interaction.vendor.convoai.subRender
+package ai.conv.internal.convoai.subRender
 
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IAudioFrameObserver
@@ -9,16 +9,16 @@ import io.agora.rtm.MessageEvent
 import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
-import ai.nex.interaction.vendor.convoai.ConversationalAIAPI_VERSION
-import ai.nex.interaction.vendor.convoai.ConversationalAIUtils
-import ai.nex.interaction.vendor.convoai.InterruptEvent
-import ai.nex.interaction.vendor.convoai.MessageType
-import ai.nex.interaction.vendor.convoai.SpeakerConfidence
-import ai.nex.interaction.vendor.convoai.Transcript
-import ai.nex.interaction.vendor.convoai.TranscriptRenderMode
-import ai.nex.interaction.vendor.convoai.TranscriptStatus
-import ai.nex.interaction.vendor.convoai.TranscriptType
-import ai.nex.interaction.vendor.convoai.VpidsInfo
+import ai.conv.internal.convoai.ConversationalAIAPI_VERSION
+import ai.conv.internal.convoai.ConversationalAIUtils
+import ai.conv.internal.convoai.InterruptEvent
+import ai.conv.internal.convoai.MessageType
+import ai.conv.internal.convoai.SpeakerConfidence
+import ai.conv.internal.convoai.Transcript
+import ai.conv.internal.convoai.TranscriptRenderMode
+import ai.conv.internal.convoai.TranscriptStatus
+import ai.conv.internal.convoai.TranscriptType
+import ai.conv.internal.convoai.VpidsInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
 import java.nio.ByteBuffer

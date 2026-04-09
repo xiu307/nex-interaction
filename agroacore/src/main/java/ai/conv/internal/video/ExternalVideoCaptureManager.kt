@@ -1,4 +1,4 @@
-package ai.nex.interaction.video
+package ai.conv.internal.video
 
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.video.AgoraVideoFrame

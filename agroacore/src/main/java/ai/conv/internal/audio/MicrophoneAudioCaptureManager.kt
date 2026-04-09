@@ -1,4 +1,4 @@
-package ai.nex.interaction.audio
+package ai.conv.internal.audio
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat

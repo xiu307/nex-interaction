@@ -1,4 +1,4 @@
-package ai.nex.interaction.vendor.convoai.subRender
+package ai.conv.internal.convoai.subRender
 
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy

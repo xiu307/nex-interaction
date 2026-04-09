@@ -1,4 +1,4 @@
-package ai.nex.interaction.rtm
+package ai.conv.internal.rtm
 
 import io.agora.rtm.RtmConfig
 

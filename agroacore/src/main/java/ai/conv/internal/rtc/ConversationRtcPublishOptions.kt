@@ -1,4 +1,4 @@
-package ai.nex.interaction.rtc
+package ai.conv.internal.rtc
 
 import io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER
 import io.agora.rtc2.ChannelMediaOptions

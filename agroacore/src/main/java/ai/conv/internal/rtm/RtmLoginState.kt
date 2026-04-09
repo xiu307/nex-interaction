@@ -1,4 +1,4 @@
-package ai.nex.interaction.rtm
+package ai.conv.internal.rtm
 
 /**
  * RTM 登录流程与 [io.agora.rtm.RtmEventListener.onLinkStateEvent] 共用的连接标志位。

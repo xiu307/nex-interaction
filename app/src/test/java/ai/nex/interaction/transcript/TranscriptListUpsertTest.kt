@@ -1,9 +1,9 @@
 package ai.nex.interaction.transcript
 
-import ai.nex.interaction.vendor.convoai.Transcript
-import ai.nex.interaction.vendor.convoai.TranscriptRenderMode
-import ai.nex.interaction.vendor.convoai.TranscriptStatus
-import ai.nex.interaction.vendor.convoai.TranscriptType
+import ai.conv.internal.convoai.Transcript
+import ai.conv.internal.convoai.TranscriptRenderMode
+import ai.conv.internal.convoai.TranscriptStatus
+import ai.conv.internal.convoai.TranscriptType
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

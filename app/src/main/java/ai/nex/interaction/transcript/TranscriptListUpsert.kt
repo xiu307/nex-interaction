@@ -1,6 +1,6 @@
 package ai.nex.interaction.transcript
 
-import ai.nex.interaction.vendor.convoai.Transcript
+import ai.conv.internal.convoai.Transcript
 
 /**
  * 按 [Transcript.turnId] + [Transcript.type] 去重更新：同键则替换，否则追加。

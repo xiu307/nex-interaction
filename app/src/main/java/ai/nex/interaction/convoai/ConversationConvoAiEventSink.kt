@@ -1,16 +1,16 @@
 package ai.nex.interaction.convoai
 
-import ai.nex.interaction.vendor.convoai.InterruptEvent
-import ai.nex.interaction.vendor.convoai.MessageError
-import ai.nex.interaction.vendor.convoai.MessageReceipt
-import ai.nex.interaction.vendor.convoai.Metric
-import ai.nex.interaction.vendor.convoai.ModuleError
-import ai.nex.interaction.vendor.convoai.StateChangeEvent
-import ai.nex.interaction.vendor.convoai.Transcript
-import ai.nex.interaction.vendor.convoai.VoiceprintStateChangeEvent
+import ai.conv.internal.convoai.InterruptEvent
+import ai.conv.internal.convoai.MessageError
+import ai.conv.internal.convoai.MessageReceipt
+import ai.conv.internal.convoai.Metric
+import ai.conv.internal.convoai.ModuleError
+import ai.conv.internal.convoai.StateChangeEvent
+import ai.conv.internal.convoai.Transcript
+import ai.conv.internal.convoai.VoiceprintStateChangeEvent
 
 /**
- * 与 [ai.nex.interaction.vendor.convoai.IConversationalAIAPIEventHandler] 一一对应，由 UI/ViewModel 实现业务。
+ * 与 [ai.conv.internal.convoai.IConversationalAIAPIEventHandler] 一一对应，由 UI/ViewModel 实现业务。
  */
 interface ConversationConvoAiEventSink {
     fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent)

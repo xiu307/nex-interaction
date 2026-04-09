@@ -216,6 +216,8 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation(project(":agroacore"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     // Photo Picker（BiometricRegisterActivity 选视频）；显式版本避免传递依赖偏旧

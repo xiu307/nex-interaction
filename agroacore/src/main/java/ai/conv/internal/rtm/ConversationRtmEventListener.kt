@@ -1,4 +1,4 @@
-package ai.nex.interaction.rtm
+package ai.conv.internal.rtm
 
 import android.util.Log
 import io.agora.rtm.LinkStateEvent

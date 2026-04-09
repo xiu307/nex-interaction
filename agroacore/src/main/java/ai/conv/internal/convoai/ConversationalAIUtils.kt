@@ -1,4 +1,4 @@
-package ai.nex.interaction.vendor.convoai
+package ai.conv.internal.convoai
 
 import android.os.Handler
 import android.os.Looper
