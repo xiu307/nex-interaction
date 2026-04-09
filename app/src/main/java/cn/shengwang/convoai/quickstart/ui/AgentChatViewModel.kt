@@ -51,7 +51,9 @@ import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
 import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
 import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
 import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
+import cn.shengwang.convoai.quickstart.session.ConversationRtmPeers
 import cn.shengwang.convoai.quickstart.session.ConversationSessionIdentity
+import cn.shengwang.convoai.quickstart.transcript.upsertTranscript
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -60,10 +62,6 @@ class AgentChatViewModel : ViewModel() {
 
     companion object {
         private const val TAG = "ConversationViewModel"
-        /** 对端 RTM 用户 ID（与 FaceRtmStreamPublisher / Android CovRtmManager 一致） */
-        private const val GEELY_RTM_PEER_USER_ID = "geely_rtm_server"
-        /** `adb logcat -s SPEAKER_BIND` */
-        private const val LOG_SPEAKER_BIND = "SPEAKER_BIND"
 
         val userId: Int = ConversationSessionIdentity.userId
         val agentUid: Int = ConversationSessionIdentity.agentUid
@@ -742,16 +740,7 @@ class AgentChatViewModel : ViewModel() {
      */
     fun addTranscript(transcript: Transcript) {
         viewModelScope.launch {
-            val currentList = _transcriptList.value.toMutableList()
-            // Update existing transcript if same turnId, otherwise add new
-            val existingIndex =
-                currentList.indexOfFirst { it.turnId == transcript.turnId && it.type == transcript.type }
-            if (existingIndex >= 0) {
-                currentList[existingIndex] = transcript
-            } else {
-                currentList.add(transcript)
-            }
-            _transcriptList.value = currentList
+            _transcriptList.value = _transcriptList.value.upsertTranscript(transcript)
         }
     }
 
@@ -764,7 +753,6 @@ class AgentChatViewModel : ViewModel() {
         viewModelScope.launch {
             val currentLogs = _debugLogList.value.toMutableList()
             currentLogs.add(message)
-            // Keep only last 100 logs to avoid memory issues
             if (currentLogs.size > 20) {
                 currentLogs.removeAt(0)
             }
@@ -792,18 +780,18 @@ class AgentChatViewModel : ViewModel() {
     private fun maybeSendRobotFaceSpeakerBindRtm(transcript: Transcript) {
         if (transcript.type != TranscriptType.USER) return
         if (_uiState.value.connectionState != ConnectionState.Connected) {
-            Log.d(LOG_SPEAKER_BIND, "skip: connectionState=${_uiState.value.connectionState}")
+            Log.d(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "skip: connectionState=${_uiState.value.connectionState}")
             return
         }
         val vpidsInfo = transcript.vpidsInfo ?: return
         val localFaceIds = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls().keys
         val confSummary = vpidsInfo.vpidsConfidence.joinToString { "${it.speaker}=${it.confidence}" }
         Log.d(
-            LOG_SPEAKER_BIND,
+            ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
             "check turn=${transcript.turnId} localFaceIds=$localFaceIds conf=[$confSummary]",
         )
         if (localFaceIds.isEmpty()) {
-            Log.d(LOG_SPEAKER_BIND, "skip: no local complete SAL face (need face OSS + PCM both)")
+            Log.d(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "skip: no local complete SAL face (need face OSS + PCM both)")
             return
         }
         val clientId = rtmReportClientId()
@@ -822,18 +810,24 @@ class AgentChatViewModel : ViewModel() {
                 speakerId = sc.speaker,
             )
             sent = true
-            Log.d(LOG_SPEAKER_BIND, "ROBOT_FACE_SPEAKER_BIND -> peer=$GEELY_RTM_PEER_USER_ID $json")
-            RtmPeerPlainTextPublisher.publish(rc, GEELY_RTM_PEER_USER_ID, json) { err ->
+            Log.d(
+                ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
+                "ROBOT_FACE_SPEAKER_BIND -> peer=${ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID} $json",
+            )
+            RtmPeerPlainTextPublisher.publish(rc, ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID, json) { err ->
                 if (err != null) {
-                    Log.e(LOG_SPEAKER_BIND, "RTM publish failed: ${err.message}")
+                    Log.e(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "RTM publish failed: ${err.message}")
                 } else {
-                    Log.d(LOG_SPEAKER_BIND, "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=${sc.speaker}")
+                    Log.d(
+                        ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
+                        "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=${sc.speaker}",
+                    )
                 }
             }
         }
         if (!sent) {
             Log.d(
-                LOG_SPEAKER_BIND,
+                ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
                 "skip: no row matched (need conf>0.5 AND speaker in local faceIds)",
             )
         }

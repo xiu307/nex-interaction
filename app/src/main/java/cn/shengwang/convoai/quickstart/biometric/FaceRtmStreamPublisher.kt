@@ -10,6 +10,7 @@ import com.robotchat.facedet.FaceDetector
 import com.robotchat.facedet.callback.FrameAnalysisCallback
 import com.robotchat.facedet.model.BodyResult
 import com.robotchat.facedet.model.FaceResult
+import cn.shengwang.convoai.quickstart.session.ConversationRtmPeers
 import io.agora.rtm.RtmClient
 import java.util.LinkedHashMap
 
@@ -26,7 +27,7 @@ object FaceRtmStreamPublisher {
     private var activityRef: AppCompatActivity? = null
     private var faceDetector: FaceDetector? = null
     private var rtmClient: RtmClient? = null
-    private var peerUserId: String = "geely_rtm_server"
+    private var peerUserId: String = ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID
     private var clientIdStr: String = ""
     private var recordIdStr: String = ""
 
@@ -52,7 +53,7 @@ object FaceRtmStreamPublisher {
         rtmClient: RtmClient,
         clientId: String,
         recordId: String,
-        peerUserId: String = "geely_rtm_server",
+        peerUserId: String = ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID,
     ) {
         stopAll()
         this.rtmClient = rtmClient
