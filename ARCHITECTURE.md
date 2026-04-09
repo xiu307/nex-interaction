@@ -51,7 +51,7 @@ app/src/main/java/
     ├── biometric/    # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调等
     ├── api/          # AgentStarter + TokenGenerator + OkHttp config
     ├── tools/        # Permission helpers、DebugStatusLogList
-    ├── KeyCenter.kt
+    ├── KeyCenter.kt     # app 侧配置桥接；对话配置转发自 agroacore 的 ConvoConfig，OSS STS 仍取 app BuildConfig
     └── AgentApp.kt
 ```
 
@@ -144,8 +144,7 @@ Additional behavior:
 ## Config Contract
 
 ```text
-env.properties
-  → BuildConfig
+ConvoConfig
   → KeyCenter
   → AgentStarter / TokenGenerator / ViewModel
 ```

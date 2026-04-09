@@ -11,17 +11,17 @@ This is a complete, runnable Android demo for real-time voice conversation with 
 
 The STT/LLM/TTS vendor configuration lives in two places that must be changed together:
 
-1. `KeyCenter.kt` (reads from `env.properties` via BuildConfig) — API keys and user-configurable IDs
+1. `agroacore` 内的 `ConvoConfig`（源码内置，`KeyCenter.kt` 仅做桥接；`OSS_STS_TOKEN_URL` 继续留在 `app`）— API keys and user-configurable IDs
 2. `AgentStarter.kt` → `buildJsonPayload()` — the JSON builder that specifies vendor names and maps KeyCenter values into the request body
 
 To switch a provider:
 - Change the `"vendor"` value in `buildJsonPayload()` (e.g., `"microsoft"` → `"fengming"` for STT)
 - Update the `"params"` sub-object to match the new vendor's required fields
-- Add/update the corresponding values in `env.properties` (which flow through BuildConfig → KeyCenter)
+- Add/update the corresponding values in `ConvoConfig`，再由 `KeyCenter` 映射进请求体
 
 Supported vendors for STT/TTS/LLM change over time. Refer to the [创建对话式智能体 API 文档](https://doc.shengwang.cn/doc/convoai/restful/convoai/operations/start-agent) for the up-to-date list of supported vendors and their required parameters.
 
-LLM: Any OpenAI-compatible API — change `LLM_URL` and `LLM_MODEL` in `env.properties`.
+LLM: Any OpenAI-compatible API — change `ConvoConfig` 中的 `LLM_URL` and `LLM_MODEL`.
 
 ## Project Overview
 
@@ -97,12 +97,10 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 ### Configuration Flow
 
 ```
-env.properties → Gradle buildConfigField → BuildConfig → KeyCenter → AgentStarter / TokenGenerator
+ConvoConfig → KeyCenter → AgentStarter / TokenGenerator
 ```
 
-Gradle validates all required properties at build time. If any are missing or empty, the build fails with a clear error message listing the missing fields.
-
-### Configuration Fields (env.properties)
+### Configuration Fields (ConvoConfig)
 
 | Field | Description | Required | Default |
 |-------|-------------|----------|---------|
@@ -120,12 +118,7 @@ This project uses HTTP token auth (`Authorization: agora token=<token>`) for RES
 
 Make sure to:
 1. Enable the primary certificate for your App ID in the [ShengWang Console](https://console.shengwang.cn/)
-2. Fill in the certificate value in `env.properties` under `APP_CERTIFICATE`
-
-### Build-Time Validation
-
-`build.gradle.kts` validates the following properties are non-empty at build time:
-`APP_ID`, `APP_CERTIFICATE`, `LLM_API_KEY`, `TTS_BYTEDANCE_APP_ID`, `TTS_BYTEDANCE_TOKEN`
+2. Fill in the certificate value in `agroacore/src/main/java/ai/conv/internal/config/ConvoConfig.kt`
 
 If any are missing, the build fails with a message listing the missing properties.
 
@@ -236,12 +229,12 @@ The agent start request body is built in `AgentStarter.kt` → `buildJsonPayload
 | `advanced_features` | RTM enable flag | `properties.advanced_features` |
 | Top-level | Channel name, agent UID, idle timeout, token | `properties.*` |
 
-To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`. Static values (API keys, model names) should stay in `KeyCenter.kt`; structural changes (adding fields, changing nesting) go directly in the JSON builder.
+To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`. Static values (API keys, model names) should stay in `ConvoConfig` / `KeyCenter`；structural changes (adding fields, changing nesting) go directly in the JSON builder.
 
 ## Key Constraints
 
-1. **APP_CERTIFICATE required**: This project uses HTTP token auth for REST API and token generation. APP_CERTIFICATE must be enabled in the ShengWang console and configured in `env.properties`. Build will fail if it's empty.
-2. **Demo Mode**: Config injected via `env.properties` → BuildConfig, client directly calls REST API
+1. **APP_CERTIFICATE required**: This project uses HTTP token auth for REST API and token generation. APP_CERTIFICATE must be enabled in the ShengWang console and configured in `ConvoConfig`。
+2. **Demo Mode**: Config currently hardcoded in `ConvoConfig`，client directly calls REST API
 3. **Production**: Sensitive info (appCertificate, LLM/STT/TTS keys) must be on backend; client only fetches Token and starts Agent through backend
 4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server
 5. **Resource Cleanup**: RTC/RTM resources fully released in `hangup()` and `onCleared()`; ConversationalAIAPI released via `destroy()`

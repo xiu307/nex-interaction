@@ -4,7 +4,7 @@
 
 ## 生产环境（必读）
 
-本工程为 **Demo**：客户端可直接请求演示 Token、调用 REST 启停 Agent，密钥在 `env.properties` → BuildConfig。
+本工程为 **Demo**：客户端可直接请求演示 Token、调用 REST 启停 Agent，密钥当前直接内嵌在 `agroacore` 的 `ConvoConfig` 中。
 
 **上线时**须改为：**Token 与启停 Agent 均由你们自己的后端完成**，客户端只拿短期凭证、不持有 `appCertificate` / LLM·TTS 等敏感配置。详见**仓库根目录** [`AGENTS.md`](../../../../../../../../../AGENTS.md) 中 **Key Constraints**（含 Production）与 **Token Generation** 相关段落。
 

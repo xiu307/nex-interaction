@@ -40,21 +40,9 @@ cd conversational-ai-quickstart-native/android-kotlin
 
 2. **配置 Android 项目**：
     - 使用 Android Studio 打开项目
-    - 配置声网 Key：
-
-      复制 `env.example.properties` 文件为 `env.properties`：
-         ```bash
-         cp env.example.properties env.properties
-         ```
-
-   编辑 `env.properties` 文件，填入你的实际配置值：
-      ```properties
-      APP_ID=your_agora_app_id
-      APP_CERTIFICATE=your_agora_app_certificate
-      LLM_API_KEY=sk-your_dashscope_api_key
-      TTS_BYTEDANCE_APP_ID=your_bytedance_app_id
-      TTS_BYTEDANCE_TOKEN=your_bytedance_access_token
-      ```
+    - 编辑 `agroacore/src/main/java/ai/conv/internal/config/ConvoConfig.kt`
+    - 将其中的声网 / ASR / LLM / TTS 参数替换为你的实际值
+    - `OSS_STS_TOKEN_URL` 继续由 `app` 侧持有，不放在 SDK 内
 
    **配置项说明**：
     - `APP_ID`：你的声网 App ID（必需）
@@ -73,7 +61,7 @@ cd conversational-ai-quickstart-native/android-kotlin
     - TTS 凭证：在 [火山引擎豆包语音文档](https://www.volcengine.com/docs/6561/105873) 对应控制台获取
 
    **注意**：
-    - `env.properties` 文件包含敏感信息，不会被提交到版本控制系统。请确保不要将你的实际凭证提交到代码仓库。
+    - `ConvoConfig.kt` 当前直接持有敏感信息。请勿将真实生产凭证提交到公开代码仓库。
     - 每次启动时会自动生成随机的 channelName，格式为 `channel_kotlin_<6-digit-random>`，无需手动配置。
     - ⚠️ **重要**：`TokenGenerator.kt` 中的 Token 生成功能仅用于演示和开发测试，**生产环境必须使用自己的服务端生成 Token**。代码中已添加详细警告说明。
     - 当前默认 pipeline 为 `fengming + qwen + bytedance`：LLM 只要求 `LLM_API_KEY`，TTS 只要求 `TTS_BYTEDANCE_APP_ID` 和 `TTS_BYTEDANCE_TOKEN`。
@@ -84,7 +72,7 @@ cd conversational-ai-quickstart-native/android-kotlin
    默认配置，无需额外设置。Android 应用直接调用声网 RESTful API 启动 Agent，方便开发者快速体验功能。
    
    **使用前提**：
-   - 确保已正确配置 `env.properties` 文件中的声网凭证和 Fengming/Qwen/Volcengine 配置。
+   - 确保已正确配置 `ConvoConfig.kt` 中的声网凭证和 Fengming/Qwen/Volcengine 配置。
    
    **适用场景**：
    - 快速体验和功能验证
