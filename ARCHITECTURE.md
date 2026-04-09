@@ -36,8 +36,13 @@ The Activity page is intentionally single-page and is organized into these regio
 app/src/main/java/
 ├── cn/shengwang/convoai/quickstart/
 │   ├── ui/            # AgentChatActivity + ViewModel + dialogs + base classes
-│   ├── session/       # ConversationSessionIdentity、ConversationRtmPeers（RTM 对端 ID / 日志标签）
+│   ├── session/       # 会话身份、Connection/Agent 状态、用户统一 Token（ConversationUserTokenLoader）、Agent REST 编排、RTM 对端常量等
 │   ├── transcript/    # TranscriptListUpsert（转录列表 upsert 纯函数）
+│   ├── rtc/             # 发布选项、进房封装（ConversationRtcJoinHelper）、引擎 Config/扩展、IRtcEngineEventHandler 桥接
+│   ├── video/           # ExternalVideoCaptureManager、自定义视频发布（ConversationExternalVideoPublishController）
+│   ├── rtm/             # RtmConfig、登录状态机、链路 Listener 桥接（ConversationRtmEventListener）
+│   ├── convoai/         # ConversationalAIAPI 事件 Sink、默认适配（DefaultConversationConvoAiEventSink）、桥接
+│   ├── biometric/     # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调（RobotFaceSpeakerBindCoordinator）等
 │   ├── api/           # AgentStarter + TokenGenerator + OkHttp config
 │   ├── tools/         # Permission helpers、DebugStatusLogList（调试日志条数上限与追加）
 │   ├── KeyCenter.kt
@@ -63,7 +68,7 @@ Tap Start Agent
   → generate userToken
   → join RTC + login RTM
   → subscribe RTM channel
-  → generate agentToken + authToken
+  → generate one channel-scoped token（作 Agent RTC token 与 REST `agora token`）
   → POST /join/ with inline ASR / LLM / TTS config
   → auto-start default microphone audio capture
   → save agentId

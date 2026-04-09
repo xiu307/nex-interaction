@@ -8,50 +8,46 @@ import androidx.lifecycle.viewModelScope
 import cn.shengwang.convoai.quickstart.AgentApp
 import cn.shengwang.convoai.quickstart.KeyCenter
 import cn.shengwang.convoai.quickstart.audio.CustomAudioInputManager
-import cn.shengwang.convoai.quickstart.api.AgentStarter
-import cn.shengwang.convoai.quickstart.api.TokenGenerator
+import cn.shengwang.convoai.quickstart.video.ConversationExternalVideoPublishController
 import cn.shengwang.convoai.quickstart.video.ExternalVideoCaptureManager
 import io.agora.convoai.convoaiApi.AgentState
 import io.agora.convoai.convoaiApi.ConversationalAIAPIConfig
 import io.agora.convoai.convoaiApi.ConversationalAIAPIImpl
 import io.agora.convoai.convoaiApi.IConversationalAIAPI
-import io.agora.convoai.convoaiApi.IConversationalAIAPIEventHandler
-import io.agora.convoai.convoaiApi.InterruptEvent
-import io.agora.convoai.convoaiApi.MessageError
-import io.agora.convoai.convoaiApi.MessageReceipt
-import io.agora.convoai.convoaiApi.Metric
 import io.agora.convoai.convoaiApi.ModuleError
 import io.agora.convoai.convoaiApi.StateChangeEvent
 import io.agora.convoai.convoaiApi.Transcript
 import io.agora.convoai.convoaiApi.TranscriptType
-import io.agora.convoai.convoaiApi.VoiceprintStateChangeEvent
 import io.agora.rtc2.Constants
-import io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER
 import io.agora.rtc2.Constants.ERR_OK
-import io.agora.rtc2.ChannelMediaOptions
-import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.RtcEngine
-import io.agora.rtc2.RtcEngineConfig
+import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.video.AgoraVideoFrame
-import io.agora.rtm.ErrorInfo
-import io.agora.rtm.LinkStateEvent
-import io.agora.rtm.PresenceEvent
-import io.agora.rtm.ResultCallback
 import io.agora.rtm.RtmClient
-import io.agora.rtm.RtmConfig
-import io.agora.rtm.RtmConstants
-import io.agora.rtm.RtmEventListener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatActivity
-import cn.shengwang.convoai.quickstart.biometric.BiometricSalRegistry
+import cn.shengwang.convoai.quickstart.convoai.ConversationConvoAiApiEventBridge
+import cn.shengwang.convoai.quickstart.convoai.DefaultConversationConvoAiEventSink
 import cn.shengwang.convoai.quickstart.biometric.FaceRtmStreamPublisher
-import cn.shengwang.convoai.quickstart.biometric.RobotFaceRtmProtocol
-import cn.shengwang.convoai.quickstart.biometric.RtmPeerPlainTextPublisher
-import cn.shengwang.convoai.quickstart.session.ConversationRtmPeers
+import cn.shengwang.convoai.quickstart.biometric.RobotFaceSpeakerBindCoordinator
+import cn.shengwang.convoai.quickstart.rtc.ConversationRtcEngineEventHandler
+import cn.shengwang.convoai.quickstart.rtc.ConversationRtcEventSink
+import cn.shengwang.convoai.quickstart.rtc.joinConversationChannelWithOptions
+import cn.shengwang.convoai.quickstart.rtc.buildConversationRtcEngineConfig
+import cn.shengwang.convoai.quickstart.rtc.loadConversationRtcAiExtensions
+import cn.shengwang.convoai.quickstart.rtm.ConversationRtmEventListener
+import cn.shengwang.convoai.quickstart.rtm.ConversationRtmEventSink
+import cn.shengwang.convoai.quickstart.rtm.ConversationRtmLogin
+import cn.shengwang.convoai.quickstart.rtm.RtmLoginState
+import cn.shengwang.convoai.quickstart.rtm.createConversationRtmConfig
+import cn.shengwang.convoai.quickstart.session.AgentSessionState
+import cn.shengwang.convoai.quickstart.session.ConversationAgentRestCoordinator
+import cn.shengwang.convoai.quickstart.session.ConversationUserTokenLoader
+import cn.shengwang.convoai.quickstart.session.ConnectionSessionState
 import cn.shengwang.convoai.quickstart.session.ConversationSessionIdentity
 import cn.shengwang.convoai.quickstart.tools.appendDebugStatusLine
 import cn.shengwang.convoai.quickstart.transcript.upsertTranscript
@@ -103,181 +99,129 @@ class AgentChatViewModel : ViewModel() {
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
     val debugLogList: StateFlow<List<String>> = _debugLogList.asStateFlow()
 
-    private var unifiedToken: String? = null
+    private val connection = ConnectionSessionState()
+    private val agentSession = AgentSessionState()
 
     private var conversationalAIAPI: IConversationalAIAPI? = null
-
-    private var channelName: String = ""
-
-    private var rtcJoined = false
-    private var rtmLoggedIn = false
-
-    // Agent management
-    private var agentId: String? = null
-    // Auth token for REST API (app-credentials mode)
-    private var authToken: String? = null
     private var audioInputManager: CustomAudioInputManager? = null
     private var externalVideoCaptureManager: ExternalVideoCaptureManager? = null
-    private var customVideoTrackPublished = false
+
+    private val externalVideoPublish by lazy {
+        ConversationExternalVideoPublishController(
+            rtcEngine = { rtcEngine },
+            audioInputManager = { audioInputManager },
+            externalVideoCapture = { externalVideoCaptureManager },
+            connection = { connection },
+            onStatusLog = { addStatusLog(it) },
+        )
+    }
 
     // RTC and RTM instances
     private var rtcEngine: RtcEngineEx? = null
     private var rtmClient: RtmClient? = null
-    private var isRtmLogin = false
+    private val rtmLoginState = RtmLoginState()
 
-    /** 已上报的 `ROBOT_FACE_SPEAKER_BIND`，键为 `turnId_speaker`，避免同一句重复发 */
-    private val speakerBindSentKeys = mutableSetOf<String>()
-    private var isLoggingIn = false
-    private val rtcEventHandler = object : IRtcEngineEventHandler() {
-        override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
-            viewModelScope.launch {
-                rtcJoined = true
-                audioInputManager?.setPublished(true)
-                externalVideoCaptureManager?.setFramePushEnabled(customVideoTrackPublished)
-                addStatusLog("Rtc onJoinChannelSuccess, channel:${channel} uid:$uid")
-                Log.d(TAG, "RTC joined channel: $channel, uid: $uid")
-                checkJoinAndLoginComplete()
+    private val robotFaceSpeakerBind = RobotFaceSpeakerBindCoordinator()
+
+    private val rtcEventSink = object : ConversationRtcEventSink {
+        override suspend fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
+            connection.rtcJoined = true
+            audioInputManager?.setPublished(true)
+            externalVideoPublish.onRtcJoinChannelSuccess()
+            addStatusLog("Rtc onJoinChannelSuccess, channel:${channel} uid:$uid")
+            Log.d(TAG, "RTC joined channel: $channel, uid: $uid")
+            checkJoinAndLoginComplete()
+        }
+
+        override suspend fun onLeaveChannel(stats: RtcStats?) {
+            stopExternalAudioCapture()
+            externalVideoPublish.resetVideoPipelineOnLeaveOrError()
+            addStatusLog("Rtc onLeaveChannel")
+        }
+
+        override suspend fun onUserJoined(uid: Int, elapsed: Int) {
+            addStatusLog("Rtc onUserJoined, uid:$uid")
+            if (uid == agentUid) {
+                Log.d(TAG, "Agent joined the channel, uid: $uid")
+            } else {
+                Log.d(TAG, "User joined the channel, uid: $uid")
             }
         }
 
-        override fun onLeaveChannel(stats: RtcStats?) {
-            super.onLeaveChannel(stats)
-            viewModelScope.launch {
-                stopExternalAudioCapture()
-                customVideoTrackPublished = false
-                externalVideoCaptureManager?.setFramePushEnabled(false)
-                addStatusLog("Rtc onLeaveChannel")
+        override suspend fun onUserOffline(uid: Int, reason: Int) {
+            addStatusLog("Rtc onUserOffline, uid:$uid")
+            if (uid == agentUid) {
+                Log.d(TAG, "Agent left the channel, uid: $uid, reason: $reason")
+            } else {
+                Log.d(TAG, "User left the channel, uid: $uid, reason: $reason")
             }
         }
 
-        override fun onUserJoined(uid: Int, elapsed: Int) {
-            viewModelScope.launch {
-                addStatusLog("Rtc onUserJoined, uid:$uid")
-                if (uid == agentUid) {
-                    Log.d(TAG, "Agent joined the channel, uid: $uid")
-                } else {
-                    Log.d(TAG, "User joined the channel, uid: $uid")
-                }
-            }
+        override suspend fun onRtcEngineError(err: Int) {
+            stopExternalAudioCapture()
+            externalVideoPublish.resetVideoPipelineOnLeaveOrError()
+            _uiState.value = _uiState.value.copy(
+                connectionState = ConnectionState.Error
+            )
+            addStatusLog("Rtc onError: $err")
+            Log.e(TAG, "RTC error: $err")
+        }
+    }
+
+    private val rtcEventHandler = ConversationRtcEngineEventHandler(
+        scope = viewModelScope,
+        logTag = TAG,
+        channelNameProvider = { connection.channelName },
+        sink = rtcEventSink,
+    )
+
+    // RTM event listener
+    private val rtmEventSink = object : ConversationRtmEventSink {
+        override fun onRtmLinkConnected() {
+            Log.d(TAG, "Rtm connected successfully")
+            rtmLoginState.isRtmLogin = true
+            addStatusLog("Rtm connected successfully")
         }
 
-        override fun onUserOffline(uid: Int, reason: Int) {
+        override fun onRtmLinkFailed() {
+            Log.d(TAG, "RTM connection failed, need to re-login")
+            rtmLoginState.isRtmLogin = false
+            rtmLoginState.isLoggingIn = false
             viewModelScope.launch {
-                addStatusLog("Rtc onUserOffline, uid:$uid")
-                if (uid == agentUid) {
-                    Log.d(TAG, "Agent left the channel, uid: $uid, reason: $reason")
-                } else {
-                    Log.d(TAG, "User left the channel, uid: $uid, reason: $reason")
-                }
-            }
-        }
-
-        override fun onError(err: Int) {
-            viewModelScope.launch {
-                stopExternalAudioCapture()
-                customVideoTrackPublished = false
-                externalVideoCaptureManager?.setFramePushEnabled(false)
                 _uiState.value = _uiState.value.copy(
                     connectionState = ConnectionState.Error
                 )
-                addStatusLog("Rtc onError: $err")
-                Log.e(TAG, "RTC error: $err")
+                addStatusLog("Rtm connected failed")
+                connection.unifiedToken = null
             }
-        }
-
-        override fun onTokenPrivilegeWillExpire(token: String?) {
-            Log.d(TAG, "RTC onTokenPrivilegeWillExpire $channelName")
         }
     }
 
-    // RTM event listener
-    private val rtmEventListener = object : RtmEventListener {
-        override fun onLinkStateEvent(event: LinkStateEvent?) {
-            super.onLinkStateEvent(event)
-            event ?: return
+    private val rtmEventListener = ConversationRtmEventListener(TAG, rtmEventSink)
 
-            Log.d(TAG, "Rtm link state changed: ${event.currentState}")
-
-            when (event.currentState) {
-                RtmConstants.RtmLinkState.CONNECTED -> {
-                    Log.d(TAG, "Rtm connected successfully")
-                    isRtmLogin = true
-                    addStatusLog("Rtm connected successfully")
-                }
-
-                RtmConstants.RtmLinkState.FAILED -> {
-                    Log.d(TAG, "RTM connection failed, need to re-login")
-                    isRtmLogin = false
-                    isLoggingIn = false
-                    viewModelScope.launch {
-                        _uiState.value = _uiState.value.copy(
-                            connectionState = ConnectionState.Error
-                        )
-                        addStatusLog("Rtm connected failed")
-                        unifiedToken = null
-                    }
-                }
-
-                else -> {
-                    // nothing
-                }
-            }
-        }
-
-        override fun onTokenPrivilegeWillExpire(channelName: String) {
-            Log.d(TAG, "RTM onTokenPrivilegeWillExpire $channelName")
-        }
-
-        override fun onPresenceEvent(event: PresenceEvent) {
-            super.onPresenceEvent(event)
-            // Handle presence events if needed
-        }
-    }
-
-    private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventHandler {
+    private val convoAiEventSink = object : DefaultConversationConvoAiEventSink() {
         override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
             _agentState.value = event.state
-        }
-
-        override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
-            // Handle interruption
-
-        }
-
-        override fun onAgentMetrics(agentUserId: String, metric: Metric) {
-            // Handle metrics
         }
 
         override fun onAgentError(agentUserId: String, error: ModuleError) {
             addStatusLog("Agent error: type=${error.type.value}, code=${error.code}, msg=${error.message}")
         }
 
-        override fun onMessageError(agentUserId: String, error: MessageError) {
-            // Handle message error
-        }
-
         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
             addTranscript(transcript)
             if (transcript.type == TranscriptType.USER) {
-                maybeSendRobotFaceSpeakerBindRtm(transcript)
+                robotFaceSpeakerBind.maybeSendOnUserTranscript(
+                    transcript = transcript,
+                    connectionConnected = _uiState.value.connectionState == ConnectionState.Connected,
+                    rtmClient = rtmClient,
+                    clientId = rtmReportClientId(),
+                )
             }
         }
-
-        override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {
-            // Handle message receipt
-        }
-
-        override fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent) {
-            // Update voice print state to notify Activity
-
-        }
-
-        override fun onDebugLog(log: String) {
-            // Only log to system log, don't collect for UI display
-            // UI will only show ViewModel status messages (statusMessage)
-            Log.d("conversationalAIAPI", log)
-        }
     }
+
+    private val conversationalAIAPIEventHandler = ConversationConvoAiApiEventBridge(convoAiEventSink)
 
     init {
         // Create RTC engine and RTM client during initialization
@@ -312,18 +256,15 @@ class AgentChatViewModel : ViewModel() {
         if (rtcEngine != null) {
             return
         }
-        val config = RtcEngineConfig()
-        config.mContext = AgentApp.Companion.instance()
-        config.mAppId = KeyCenter.APP_ID
-        config.mChannelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
-        config.mAudioScenario = Constants.AUDIO_SCENARIO_DEFAULT
-        config.mEventHandler = rtcEventHandler
+        val config = buildConversationRtcEngineConfig(
+            context = AgentApp.instance(),
+            appId = KeyCenter.APP_ID,
+            eventHandler = rtcEventHandler,
+        )
         try {
             rtcEngine = (RtcEngine.create(config) as RtcEngineEx).apply {
                 enableVideo()
-                // load extension provider for AI-QoS
-                loadExtensionProvider("ai_echo_cancellation_extension")
-                loadExtensionProvider("ai_noise_suppression_extension")
+                loadConversationRtcAiExtensions()
             }
             audioInputManager = CustomAudioInputManager(
                 rtcEngine = rtcEngine!!,
@@ -342,30 +283,6 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    private fun buildChannelMediaOptions(
-        customAudioTrackId: Int? = null,
-        publishCustomVideoTrack: Boolean,
-        customTrackId: Int? = null
-    ): ChannelMediaOptions {
-        return ChannelMediaOptions().apply {
-            clientRoleType = CLIENT_ROLE_BROADCASTER
-            // AUDIO_TRACK_DIRECT replaces the microphone track.
-            publishMicrophoneTrack = false
-            publishCustomAudioTrack = true
-            if (customAudioTrackId != null && customAudioTrackId >= 0) {
-                publishCustomAudioTrackId = customAudioTrackId
-            }
-            publishCameraTrack = false
-            this.publishCustomVideoTrack = publishCustomVideoTrack
-            if (customTrackId != null && customTrackId >= 0) {
-                this.customVideoTrackId = customTrackId
-            }
-            autoSubscribeAudio = true
-            autoSubscribeVideo = true
-            startPreview = false
-        }
-    }
-
     /**
      * Init RTM client
      */
@@ -374,7 +291,7 @@ class AgentChatViewModel : ViewModel() {
             return
         }
 
-        val rtmConfig = RtmConfig.Builder(KeyCenter.APP_ID, userId.toString()).build()
+        val rtmConfig = createConversationRtmConfig(KeyCenter.APP_ID, userId.toString())
         try {
             rtmClient = RtmClient.create(rtmConfig)
             rtmClient?.addEventListener(rtmEventListener)
@@ -387,85 +304,19 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Login RTM
-     */
     private fun loginRtm(rtmToken: String, completion: (Exception?) -> Unit) {
-        Log.d(TAG, "Starting RTM login")
-
-        if (isLoggingIn) {
-            completion.invoke(Exception("Login already in progress"))
-            Log.d(TAG, "Login already in progress")
-            return
-        }
-
-        if (isRtmLogin) {
-            completion.invoke(null) // Already logged in
-            Log.d(TAG, "Already logged in")
-            return
-        }
-
-        val client = this.rtmClient ?: run {
-            completion.invoke(Exception("RTM client not initialized"))
-            Log.d(TAG, "RTM client not initialized")
-            return
-        }
-
-        isLoggingIn = true
-        Log.d(TAG, "Performing logout to ensure clean environment before login")
-
-        // Force logout first (synchronous flag update)
-        isRtmLogin = false
-        client.logout(object : ResultCallback<Void> {
-            override fun onSuccess(responseInfo: Void?) {
-                Log.d(TAG, "Logout completed, starting login")
-                performRtmLogin(client, rtmToken, completion)
-            }
-
-            override fun onFailure(errorInfo: ErrorInfo?) {
-                Log.d(TAG, "Logout failed but continuing with login: ${errorInfo?.errorReason}")
-                performRtmLogin(client, rtmToken, completion)
-            }
-        })
+        ConversationRtmLogin.loginAfterLogout(
+            client = rtmClient,
+            rtmToken = rtmToken,
+            state = rtmLoginState,
+            logTag = TAG,
+            completion = completion,
+            statusLog = { addStatusLog(it) },
+        )
     }
 
-    private fun performRtmLogin(client: RtmClient, rtmToken: String, completion: (Exception?) -> Unit) {
-        client.login(rtmToken, object : ResultCallback<Void> {
-            override fun onSuccess(p0: Void?) {
-                isRtmLogin = true
-                isLoggingIn = false
-                Log.d(TAG, "RTM login successful")
-                completion.invoke(null)
-                addStatusLog("Rtm login successful")
-            }
-
-            override fun onFailure(errorInfo: ErrorInfo?) {
-                isRtmLogin = false
-                isLoggingIn = false
-                Log.e(TAG, "RTM token login failed: ${errorInfo?.errorReason}")
-                completion.invoke(Exception("${errorInfo?.errorCode}"))
-                addStatusLog("Rtm login failed, code: ${errorInfo?.errorCode}")
-            }
-        })
-    }
-
-    /**
-     * Logout RTM
-     */
     private fun logoutRtm() {
-        Log.d(TAG, "RTM start logout")
-        rtmClient?.logout(object : ResultCallback<Void> {
-            override fun onSuccess(responseInfo: Void?) {
-                isRtmLogin = false
-                Log.d(TAG, "RTM logout successful")
-            }
-
-            override fun onFailure(errorInfo: ErrorInfo?) {
-                Log.e(TAG, "RTM logout failed: ${errorInfo?.errorCode}")
-                // Still mark as logged out since we attempted logout
-                isRtmLogin = false
-            }
-        })
+        ConversationRtmLogin.logout(rtmClient, rtmLoginState, TAG)
     }
 
     /**
@@ -487,13 +338,15 @@ class AgentChatViewModel : ViewModel() {
             return false
         }
 
-        customVideoTrackPublished = false
-        val channelOptions = buildChannelMediaOptions(
+        externalVideoPublish.prepareForNewRtcJoin()
+        val ret = joinConversationChannelWithOptions(
+            rtcEngine = rtcEngine,
+            rtcToken = rtcToken,
+            channelName = channelName,
+            uid = uid,
             customAudioTrackId = customAudioTrackId,
-            publishCustomVideoTrack = false
+            publishCustomVideoTrack = false,
         )
-        externalVideoCaptureManager?.setFramePushEnabled(false)
-        val ret = rtcEngine?.joinChannel(rtcToken, channelName, uid, channelOptions)
         Log.d(TAG, "Joining RTC channel: $channelName, uid: $uid")
         if (ret == ERR_OK) {
             Log.d(TAG, "Join RTC room success")
@@ -527,7 +380,7 @@ class AgentChatViewModel : ViewModel() {
      * Check if both RTC and RTM are connected, then start agent
      */
     private fun checkJoinAndLoginComplete() {
-        if (rtcJoined && rtmLoggedIn) {
+        if (connection.rtcAndRtmReady) {
             startAgent()
         }
     }
@@ -537,73 +390,30 @@ class AgentChatViewModel : ViewModel() {
      */
     fun startAgent() {
         viewModelScope.launch {
-            if (agentId != null) {
-                Log.d(TAG, "Agent already started, agentId: $agentId")
-                addStatusLog("Agent already started, agentId=$agentId")
+            if (agentSession.agentId != null) {
+                Log.d(TAG, "Agent already started, agentId: ${agentSession.agentId}")
+                addStatusLog("Agent already started, agentId=${agentSession.agentId}")
                 return@launch
             }
 
-            // Generate token for agent (always required)
-            val tokenResult = TokenGenerator.generateTokensAsync(
-                channelName = channelName,
-                uid = agentUid.toString()
-            )
-
-            val agentToken = tokenResult.fold(
-                onSuccess = { token ->
-                    addStatusLog("Generate agent token successfully")
-                    token
-                },
-                onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
-                    addStatusLog("Generate agent token failed")
-                    Log.e(TAG, "Failed to generate agent token: ${exception.message}", exception)
-                    return@launch
-                }
-            )
-
-            // Generate auth token for REST API (requires APP_CERTIFICATE)
-            val authTokenResult = TokenGenerator.generateTokensAsync(
-                channelName = channelName,
-                uid = agentUid.toString()
-            )
-
-            val restAuthToken = authTokenResult.fold(
-                onSuccess = { token ->
-                    authToken = token
-                    addStatusLog("Generate auth token successfully")
-                    token
-                },
-                onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
-                    addStatusLog("Generate auth token failed")
-                    Log.e(TAG, "Failed to generate auth token: ${exception.message}", exception)
-                    return@launch
-                }
-            )
-
-            val startAgentResult = AgentStarter.startAgentAsync(
-                channelName = channelName,
+            val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
+                channelName = connection.channelName,
                 agentRtcUid = agentUid.toString(),
-                agentToken = agentToken,
-                authToken = restAuthToken,
-                remoteRtcUid = userId.toString()
+                remoteRtcUid = userId.toString(),
             )
-            startAgentResult.fold(
-                onSuccess = { agentId ->
-                    this@AgentChatViewModel.agentId = agentId
+            startResult.fold(
+                onSuccess = { outcome ->
+                    agentSession.agentId = outcome.agentId
+                    agentSession.authToken = outcome.channelScopedToken
+                    addStatusLog("Generate channel token & start agent OK")
                     if (!startAudioInputInternal()) {
                         addStatusLog("Enable audio input failed")
                     }
                     _uiState.value = _uiState.value.copy(
                         connectionState = ConnectionState.Connected
                     )
-                    addStatusLog("Agent start successfully, agentId=$agentId")
-                    Log.d(TAG, "Agent started successfully, agentId: $agentId")
+                    addStatusLog("Agent start successfully, agentId=${outcome.agentId}")
+                    Log.d(TAG, "Agent started successfully, agentId: ${outcome.agentId}")
                     Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
                 },
                 onFailure = { exception ->
@@ -611,7 +421,7 @@ class AgentChatViewModel : ViewModel() {
                         connectionState = ConnectionState.Error
                     )
                     addStatusLog("Agent start failed")
-                    Log.e(TAG, "Failed to start agent: ${exception.message}", exception)
+                    Log.e(TAG, "startRemoteAgent failed: ${exception.message}", exception)
                 }
             )
         }
@@ -623,16 +433,12 @@ class AgentChatViewModel : ViewModel() {
      * @return Token string on success, null on failure
      */
     private suspend fun generateUserToken(): String? {
-        // Get unified token for both RTC and RTM
-        val tokenResult = TokenGenerator.generateTokensAsync(
-            channelName = "",
-            uid = userId.toString(),
-        )
-
-        return tokenResult.fold(
+        return ConversationUserTokenLoader.fetchAndStoreUnifiedUserToken(
+            connection = connection,
+            userId = userId.toString(),
+        ).fold(
             onSuccess = { token ->
                 addStatusLog("Generate user token successfully")
-                unifiedToken = token
                 token
             },
             onFailure = { exception ->
@@ -646,6 +452,28 @@ class AgentChatViewModel : ViewModel() {
         )
     }
 
+    /** RTM 登录成功：标记状态、订阅频道消息，并在 RTC 也已就绪时启动 Agent。 */
+    private fun onRtmLoginSucceeded(channelName: String) {
+        connection.rtmLoggedIn = true
+        conversationalAIAPI?.subscribeMessage(channelName) { errorInfo ->
+            if (errorInfo != null) {
+                Log.e(TAG, "Subscribe message error: ${errorInfo}")
+            }
+        }
+        checkJoinAndLoginComplete()
+    }
+
+    /** RTM 登录失败：停止采集、离开 RTC 并回到 Error，避免半连接状态。 */
+    private fun rollbackAfterRtmLoginFailed(exception: Exception) {
+        stopExternalAudioCapture()
+        leaveRtcChannel()
+        connection.markRtcLeft()
+        _uiState.value = _uiState.value.copy(
+            connectionState = ConnectionState.Error
+        )
+        Log.e(TAG, "RTM login failed: ${exception.message}", exception)
+    }
+
     /**
      * Join RTC channel and login RTM
      * @param channelName Channel name to join
@@ -653,16 +481,14 @@ class AgentChatViewModel : ViewModel() {
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun joinChannelAndLogin(channelName: String) {
         viewModelScope.launch {
-            this@AgentChatViewModel.channelName = channelName
-            rtcJoined = false
-            rtmLoggedIn = false
+            connection.beginJoinAttempt(channelName)
 
             _uiState.value = _uiState.value.copy(
                 connectionState = ConnectionState.Connecting
             )
 
             // Get token if not available, otherwise use existing token
-            val token = unifiedToken ?: generateUserToken() ?: return@launch
+            val token = connection.unifiedToken ?: generateUserToken() ?: return@launch
 
             // Join RTC channel with the unified token
             if (!joinRtcChannel(token, channelName, userId)) {
@@ -673,21 +499,9 @@ class AgentChatViewModel : ViewModel() {
             loginRtm(token) { exception ->
                 viewModelScope.launch {
                     if (exception == null) {
-                        rtmLoggedIn = true
-                        conversationalAIAPI?.subscribeMessage(channelName) { errorInfo ->
-                            if (errorInfo != null) {
-                                Log.e(TAG, "Subscribe message error: ${errorInfo}")
-                            }
-                        }
-                        checkJoinAndLoginComplete()
+                        onRtmLoginSucceeded(channelName)
                     } else {
-                        stopExternalAudioCapture()
-                        leaveRtcChannel()
-                        rtcJoined = false
-                        _uiState.value = _uiState.value.copy(
-                            connectionState = ConnectionState.Error
-                        )
-                        Log.e(TAG, "RTM login failed: ${exception.message}", exception)
+                        rollbackAfterRtmLoginFailed(exception)
                     }
                 }
             }
@@ -763,66 +577,6 @@ class AgentChatViewModel : ViewModel() {
     private fun rtmReportClientId(): String = userId.toString()
 
     /**
-     * SAL [vpids_info] 与本地 [BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls] 的 faceId 一致且置信度 > 0.5 时，
-     * 经 RTM 发送 [RobotFaceRtmProtocol.TYPE_ROBOT_FACE_SPEAKER_BIND]（对齐 Android 场景工程对话页逻辑）。
-     */
-    private fun maybeSendRobotFaceSpeakerBindRtm(transcript: Transcript) {
-        if (transcript.type != TranscriptType.USER) return
-        if (_uiState.value.connectionState != ConnectionState.Connected) {
-            Log.d(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "skip: connectionState=${_uiState.value.connectionState}")
-            return
-        }
-        val vpidsInfo = transcript.vpidsInfo ?: return
-        val localFaceIds = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls().keys
-        val confSummary = vpidsInfo.vpidsConfidence.joinToString { "${it.speaker}=${it.confidence}" }
-        Log.d(
-            ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
-            "check turn=${transcript.turnId} localFaceIds=$localFaceIds conf=[$confSummary]",
-        )
-        if (localFaceIds.isEmpty()) {
-            Log.d(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "skip: no local complete SAL face (need face OSS + PCM both)")
-            return
-        }
-        val clientId = rtmReportClientId()
-        val recordId = transcript.turnId.toString()
-        val rc = rtmClient ?: return
-        var sent = false
-        for (sc in vpidsInfo.vpidsConfidence) {
-            if (sc.confidence <= 0.5) continue
-            if (!localFaceIds.contains(sc.speaker)) continue
-            val dedupeKey = "${transcript.turnId}_${sc.speaker}"
-            if (!speakerBindSentKeys.add(dedupeKey)) continue
-            val json = RobotFaceRtmProtocol.buildSpeakerBindJson(
-                clientId = clientId,
-                recordId = recordId,
-                faceId = sc.speaker,
-                speakerId = sc.speaker,
-            )
-            sent = true
-            Log.d(
-                ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
-                "ROBOT_FACE_SPEAKER_BIND -> peer=${ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID} $json",
-            )
-            RtmPeerPlainTextPublisher.publish(rc, ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID, json) { err ->
-                if (err != null) {
-                    Log.e(ConversationRtmPeers.LOG_TAG_SPEAKER_BIND, "RTM publish failed: ${err.message}")
-                } else {
-                    Log.d(
-                        ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
-                        "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=${sc.speaker}",
-                    )
-                }
-            }
-        }
-        if (!sent) {
-            Log.d(
-                ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
-                "skip: no row matched (need conf>0.5 AND speaker in local faceIds)",
-            )
-        }
-    }
-
-    /**
      * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
      * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
      */
@@ -831,17 +585,17 @@ class AgentChatViewModel : ViewModel() {
             FaceRtmStreamPublisher.stopAll()
             return
         }
-        if (customVideoTrackPublished) {
+        if (externalVideoPublish.isCustomVideoPublishing) {
             FaceRtmStreamPublisher.stopAll()
             return
         }
         val rc = rtmClient ?: return
-        if (channelName.isEmpty()) return
+        if (connection.channelName.isEmpty()) return
         FaceRtmStreamPublisher.start(
             activity = activity,
             rtmClient = rc,
             clientId = rtmReportClientId(),
-            recordId = channelName,
+            recordId = connection.channelName,
         )
     }
 
@@ -849,20 +603,19 @@ class AgentChatViewModel : ViewModel() {
     fun hangup() {
         viewModelScope.launch {
             try {
-                FaceRtmStreamPublisher.stopAll()
-                stopExternalAudioCapture()
-                conversationalAIAPI?.unsubscribeMessage(channelName) { errorInfo ->
+                stopFaceUplinkAndExternalAudio()
+                conversationalAIAPI?.unsubscribeMessage(connection.channelName) { errorInfo ->
                     if (errorInfo != null) {
                         Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
                     }
                 }
 
                 // Stop agent if it was started
-                if (agentId != null) {
-                    val stoppedAgentId = agentId!!
-                    val stopResult = AgentStarter.stopAgentAsync(
+                if (agentSession.agentId != null) {
+                    val stoppedAgentId = agentSession.agentId!!
+                    val stopResult = ConversationAgentRestCoordinator.stopRemoteAgentIfStarted(
                         agentId = stoppedAgentId,
-                        authToken = authToken ?: ""
+                        authToken = agentSession.authToken,
                     )
                     stopResult.fold(
                         onSuccess = {
@@ -874,20 +627,14 @@ class AgentChatViewModel : ViewModel() {
                             addStatusLog("Agent stop failed, agentId=$stoppedAgentId: ${exception.message}")
                         }
                     )
-                    agentId = null
                 }
 
                 leaveRtcChannel()
-                rtcJoined = false
-                customVideoTrackPublished = false
-                authToken = null
-                _uiState.value = _uiState.value.copy(
-                    isAudioInputEnabled = false,
-                    connectionState = ConnectionState.Idle
-                )
-                _transcriptList.value = emptyList()
-                _agentState.value = AgentState.IDLE
-                speakerBindSentKeys.clear()
+                connection.markRtcLeft()
+                externalVideoPublish.resetVideoPipelineOnLeaveOrError()
+                agentSession.clearAgentRestFields()
+                resetConversationUiAfterHangup()
+                robotFaceSpeakerBind.clearDedupeState()
                 Log.d(TAG, "Hangup completed")
             } catch (e: Exception) {
                 Log.e(TAG, "Error during hangup: ${e.message}", e)
@@ -897,9 +644,8 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        speakerBindSentKeys.clear()
-        FaceRtmStreamPublisher.stopAll()
-        stopExternalAudioCapture()
+        robotFaceSpeakerBind.clearDedupeState()
+        stopFaceUplinkAndExternalAudio()
         leaveRtcChannel()
         logoutRtm()
         conversationalAIAPI?.removeHandler(conversationalAIAPIEventHandler)
@@ -946,6 +692,21 @@ class AgentChatViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
     }
 
+    /** 停止人脸 RTM 上行与自定义音频采集（挂断与 ViewModel 销毁共用）。 */
+    private fun stopFaceUplinkAndExternalAudio() {
+        FaceRtmStreamPublisher.stopAll()
+        stopExternalAudioCapture()
+    }
+
+    private fun resetConversationUiAfterHangup() {
+        _uiState.value = _uiState.value.copy(
+            isAudioInputEnabled = false,
+            connectionState = ConnectionState.Idle
+        )
+        _transcriptList.value = emptyList()
+        _agentState.value = AgentState.IDLE
+    }
+
     /**
      * 开启或关闭 RTC 自定义视频发布。
      *
@@ -956,68 +717,8 @@ class AgentChatViewModel : ViewModel() {
      * @param enabled `true` 表示开启自定义视频发布，`false` 表示关闭
      * @return `true` 表示切换成功，`false` 表示切换失败
      */
-    fun setExternalVideoPublishingEnabled(enabled: Boolean): Boolean {
-        val manager = externalVideoCaptureManager ?: return false
-
-        if (!enabled) {
-            manager.setFramePushEnabled(false)
-            if (!rtcJoined) {
-                customVideoTrackPublished = false
-                return true
-            }
-        } else if (customVideoTrackPublished) {
-            manager.setFramePushEnabled(true)
-            return true
-        } else if (!rtcJoined) {
-            addStatusLog("External video publishing requires an active RTC connection")
-            return false
-        }
-
-        val customTrackId = if (enabled) {
-            manager.ensureCustomVideoTrack()
-        } else {
-            manager.getCustomVideoTrackId()
-        }
-
-        if (enabled && customTrackId < 0) {
-            addStatusLog("Create custom video track failed ret: $customTrackId")
-            return false
-        }
-
-        val result = rtcEngine?.updateChannelMediaOptions(
-            buildChannelMediaOptions(
-                customAudioTrackId = audioInputManager?.getCustomAudioTrackId()
-                    ?.takeIf { it >= 0 },
-                publishCustomVideoTrack = enabled,
-                customTrackId = customTrackId.takeIf { it >= 0 }
-            )
-        ) ?: -1
-
-        return if (result == ERR_OK) {
-            customVideoTrackPublished = enabled
-            manager.setFramePushEnabled(enabled)
-            if (enabled) {
-                FaceRtmStreamPublisher.stopAll()
-            }
-            addStatusLog(
-                if (enabled) {
-                    "External video publishing enabled"
-                } else {
-                    "External video publishing disabled"
-                }
-            )
-            true
-        } else {
-            addStatusLog(
-                if (enabled) {
-                    "Enable external video publishing failed ret: $result"
-                } else {
-                    "Disable external video publishing failed ret: $result"
-                }
-            )
-            false
-        }
-    }
+    fun setExternalVideoPublishingEnabled(enabled: Boolean): Boolean =
+        externalVideoPublish.setPublishingEnabled(enabled)
 
     /**
      * 推送一帧业务侧已经组装好的外部视频帧。
@@ -1028,9 +729,8 @@ class AgentChatViewModel : ViewModel() {
      * @param frame 业务侧构造完成的 Agora 视频帧对象
      * @return SDK 推帧结果，`0` 表示成功，负数表示失败
      */
-    fun pushExternalVideoFrame(frame: AgoraVideoFrame): Int {
-        return externalVideoCaptureManager?.pushExternalVideoFrame(frame) ?: -1
-    }
+    fun pushExternalVideoFrame(frame: AgoraVideoFrame): Int =
+        externalVideoPublish.pushExternalVideoFrame(frame)
 
     /**
      * 推送一帧业务侧原始 PCM 数据到 RTC 自定义音频轨。
@@ -1068,13 +768,11 @@ class AgentChatViewModel : ViewModel() {
         height: Int,
         rotation: Int = 0,
         timestampMs: Long = System.currentTimeMillis()
-    ): Int {
-        return externalVideoCaptureManager?.pushExternalNv21Frame(
-            data = data,
-            width = width,
-            height = height,
-            rotation = rotation,
-            timestampMs = timestampMs
-        ) ?: -1
-    }
+    ): Int = externalVideoPublish.pushExternalNv21Frame(
+        data = data,
+        width = width,
+        height = height,
+        rotation = rotation,
+        timestampMs = timestampMs
+    )
 }
