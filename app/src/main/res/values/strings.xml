@@ -31,7 +31,7 @@
     <!-- 与 Android CovBiometricRegisterActivity 对齐 -->
     <string name="biometric_register_title_full">声纹与面部注册</string>
     <string name="biometric_step1_title">步骤 1 · 视频注册人脸</string>
-    <string name="biometric_step1_hint">若已将注册用视频保存在相册，请直接点下方「从相册选视频」，无需再次录制。完整顺序：① 从相册选视频或录制新视频 → facedet 抽帧入库并分配 faceId，封面图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需配置 env.properties 中 OSS_STS_TOKEN_URL。</string>
+    <string name="biometric_step1_hint">若已将注册用视频保存在相册，请直接点下方「从相册选视频」，无需再次录制。完整顺序：① 从相册选视频或录制新视频 → facedet 抽帧入库并分配 faceId，封面图上传 OSS → ② 朗读并录 PCM 上传 OSS → ③ 保存到本地 JSON。需由 app 侧提供 OSS_STS_TOKEN_URL。</string>
     <string name="biometric_step1_done_hint">步骤一注册完毕</string>
     <string name="biometric_faceid_input_hint">例如 person_1</string>
     <string name="biometric_face_video_gallery">从相册选视频（推荐）</string>
@@ -45,7 +45,7 @@
     <string name="biometric_faceid_enrolled_uploading">已注册 faceId=%1$s 质量=%2$.3f，正在上传人脸图…</string>
     <string name="biometric_face_image_upload_fail">人脸图处理或上传失败</string>
     <string name="biometric_face_image_upload_fail_code">人脸图上传失败 code=%d</string>
-    <string name="biometric_oss_sts_not_configured">当前无可用 OSS STS（URL 为空或仅本地模式）。需要上传时请在 env.properties 填写 OSS_STS_TOKEN_URL 并重新编译；与 Android 一致的可不写该键以使用默认测试 STS。</string>
+    <string name="biometric_oss_sts_not_configured">当前无可用 OSS STS（URL 为空或仅本地模式）。需要上传时请在 app 侧提供 OSS_STS_TOKEN_URL 并重新编译；与 Android 一致的可不写该键以使用默认测试 STS。</string>
     <string name="biometric_oss_init_fail">STS/OSS 初始化失败（code=8）：请检查 OSS_STS_TOKEN_URL 是否可达、STS 返回是否含 accessKeyId / accessKeySecret / securityToken。详见 logcat 标签 OssTestBucket。</string>
     <string name="biometric_oss_network_fail">OSS 网络异常（code=9），请检查网络后重试。</string>
     <string name="biometric_oss_service_fail">OSS 服务错误（code=10），请查看 logcat 中 OssTestBucket。</string>

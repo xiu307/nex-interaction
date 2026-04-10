@@ -30,8 +30,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatActivity
-import ai.nex.interaction.convoai.ConversationConvoAiApiEventBridge
-import ai.nex.interaction.convoai.DefaultConversationConvoAiEventSink
+import ai.conv.internal.convoai.IConversationalAIAPIEventHandler
+import ai.conv.internal.convoai.InterruptEvent
+import ai.conv.internal.convoai.MessageError
+import ai.conv.internal.convoai.MessageReceipt
+import ai.conv.internal.convoai.Metric
+import ai.conv.internal.convoai.VoiceprintStateChangeEvent
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
@@ -211,14 +215,24 @@ class AgentChatViewModel : ViewModel() {
 
     private val rtmEventListener = ConversationRtmEventListener(TAG, rtmEventSink)
 
-    private val convoAiEventSink = object : DefaultConversationConvoAiEventSink() {
+    private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventHandler {
         override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
             _agentState.value = event.state
         }
 
+        override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {}
+
+        override fun onAgentMetrics(agentUserId: String, metric: Metric) {}
+
         override fun onAgentError(agentUserId: String, error: ModuleError) {
             addStatusLog("Agent error: type=${error.type.value}, code=${error.code}, msg=${error.message}")
         }
+
+        override fun onMessageError(agentUserId: String, error: MessageError) {}
+
+        override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {}
+
+        override fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent) {}
 
         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
             addTranscript(transcript)
@@ -231,9 +245,11 @@ class AgentChatViewModel : ViewModel() {
                 )
             }
         }
-    }
 
-    private val conversationalAIAPIEventHandler = ConversationConvoAiApiEventBridge(convoAiEventSink)
+        override fun onDebugLog(log: String) {
+            Log.d("conversationalAIAPI", log)
+        }
+    }
 
     init {
         // Create RTC engine and RTM client during initialization

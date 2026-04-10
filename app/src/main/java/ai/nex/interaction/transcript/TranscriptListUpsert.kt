@@ -3,6 +3,7 @@ package ai.nex.interaction.transcript
 import ai.conv.internal.convoai.Transcript
 
 /**
+ * 有就更新没有就插入
  * 按 [Transcript.turnId] + [Transcript.type] 去重更新：同键则替换，否则追加。
  * 供 UI 层展示列表与 [ai.nex.interaction.ui.AgentChatViewModel] 共用，便于单测。
  */
