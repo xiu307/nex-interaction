@@ -47,7 +47,6 @@ app/src/main/java/
     ├── session/      # 会话身份、Connection/Agent 状态、用户统一 Token、Agent REST 编排、RTM 对端常量等
     ├── transcript/   # TranscriptListUpsert（转录列表 upsert 纯函数）
     ├── video/        # 自定义视频发布控制器、CameraX 示例输入
-    ├── convoai/      # 业务桥接：事件 Sink、DefaultConversationConvoAiEventSink，对接 agroacore 协议层
     ├── biometric/    # SAL / 人脸 RTM 上行、ROBOT_FACE_SPEAKER_BIND 协调等
     ├── api/          # AgentStarter + TokenGenerator + OkHttp config
     ├── tools/        # Permission helpers、DebugStatusLogList

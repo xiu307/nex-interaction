@@ -41,38 +41,35 @@ cd conversational-ai-quickstart-native/android-kotlin
 2. **配置 Android 项目**：
     - 使用 Android Studio 打开项目
     - 编辑 `agroacore/src/main/java/ai/conv/internal/config/ConvoConfig.kt`
-    - 将其中的声网 / ASR / LLM / TTS 参数替换为你的实际值
+    - 将其中的声网 / ASR / LLM / TTS / SAL 参数替换为你的实际值
     - `OSS_STS_TOKEN_URL` 继续由 `app` 侧持有，不放在 SDK 内
 
    **配置项说明**：
     - `APP_ID`：你的声网 App ID（必需）
     - `APP_CERTIFICATE`：你的 App Certificate（必需，用于 Token 生成和 REST API 认证）
-    - `LLM_API_KEY`：LLM API Key（必需，如阿里云百炼 DashScope）
-    - `LLM_URL`：LLM API 地址（可选，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`）
-    - `LLM_MODEL`：LLM 模型名称（可选，默认 `qwen-plus`）
-    - `TTS_BYTEDANCE_APP_ID`：火山引擎 TTS App ID（必需）
-    - `TTS_BYTEDANCE_TOKEN`：火山引擎 TTS Access Token（必需）
-    - 火山引擎其余 TTS 默认参数当前直接写在代码里：`cluster=volcano_tts`、`voice_type=BV700_streaming`、`speed_ratio=1.0`、`volume_ratio=1.0`、`pitch_ratio=1.0`
-    - 凤鸣 ASR 为声网内置供应商，当前示例不需要单独配置额外凭证
+    - `ASR_VENDOR` / `ASR_PARAMS`：ASR 供应商及其参数
+    - `LLM_VENDOR` / `LLM_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_PARRAMS`：LLM 配置
+    - `TTS_VENDOR` / `TTS_PARAMS`：TTS 配置
+    - `SAL_ENABLE_PERSONALIZED` / `SAL_PERSONALIZED_PCM_URL` / `SAL_BIOMETRIC_SAMPLE_URLS`：SAL 个性化与预注册样本配置
+    - `OSS_STS_TOKEN_URL`：仅在 `app` 侧配置，供 OSS 上传链路使用
 
    **获取方式**：
     - 体验声网对话式 AI 引擎前，你需要先在声网控制台创建项目并开通对话式 AI 引擎服务，获取 App ID 和 App Certificate。[开通服务](https://doc.shengwang.cn/doc/convoai/restful/get-started/enable-service)
-    - LLM API Key：在 [阿里云百炼](https://help.aliyun.com/zh/model-studio/get-api-key) 获取
-    - TTS 凭证：在 [火山引擎豆包语音文档](https://www.volcengine.com/docs/6561/105873) 对应控制台获取
+    - 其余 ASR / LLM / TTS 参数，请按你实际接入的供应商准备
 
    **注意**：
     - `ConvoConfig.kt` 当前直接持有敏感信息。请勿将真实生产凭证提交到公开代码仓库。
     - 每次启动时会自动生成随机的 channelName，格式为 `channel_kotlin_<6-digit-random>`，无需手动配置。
     - ⚠️ **重要**：`TokenGenerator.kt` 中的 Token 生成功能仅用于演示和开发测试，**生产环境必须使用自己的服务端生成 Token**。代码中已添加详细警告说明。
-    - 当前默认 pipeline 为 `fengming + qwen + bytedance`：LLM 只要求 `LLM_API_KEY`，TTS 只要求 `TTS_BYTEDANCE_APP_ID` 和 `TTS_BYTEDANCE_TOKEN`。
-   - 等待 Gradle 同步完成
+    - 当前 demo 的 pipeline 由 `AgentStarter.kt` 读取 `ConvoConfig.kt` 动态组装；仓库现状默认接的是自定义 ASR / OpenAI 兼容 LLM / OpenAI 兼容 TTS 配置。
+    - 等待 Gradle 同步完成
 
 3. **配置 Agent 启动方式**：
    
    默认配置，无需额外设置。Android 应用直接调用声网 RESTful API 启动 Agent，方便开发者快速体验功能。
    
    **使用前提**：
-   - 确保已正确配置 `ConvoConfig.kt` 中的声网凭证和 Fengming/Qwen/Volcengine 配置。
+   - 确保已正确配置 `ConvoConfig.kt` 中的声网凭证与 ASR / LLM / TTS / SAL 参数。
    
    **适用场景**：
    - 快速体验和功能验证
@@ -137,9 +134,10 @@ cd conversational-ai-quickstart-native/android-kotlin
 
 ## 关键文件
 
+- `docs/AGROACORE_SDK.md`：`agroacore` SDK 的定位、能力边界与接入说明
 - `AgentChatActivity.kt`：主界面，包含日志显示、Agent 状态指示器、聊天气泡转录列表和控制按钮
 - `AgentChatViewModel.kt`：业务逻辑层，包含 RTC 引擎、RTM 客户端的管理和 Agent 启动逻辑
-- `AgentStarter.kt`：Agent 启动 API 封装，使用 `agora token=<token>` 认证模式，内联 Fengming/Qwen/Volcengine pipeline 配置
+- `AgentStarter.kt`：Agent 启动 API 封装，使用 `agora token=<token>` 认证模式，并按 `ConvoConfig` 动态组装 ASR / LLM / TTS / SAL 请求体
 - `TokenGenerator.kt`：Token 生成工具（仅用于开发测试，生产环境需使用服务端生成）
 - `agroacore/src/main/java/ai/conv/internal/convoai/`：声网 ConversationalAIAPI 协议/解析层（第一阶段已抽到 SDK，可与上游示例对齐替换）
 
