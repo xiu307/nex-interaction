@@ -107,8 +107,8 @@
     <string name="agent_chat_copy_log">复制日志</string>
     <string name="agent_chat_log_copied">已复制到剪贴板</string>
     <string name="agent_chat_log_empty">暂无日志可复制</string>
-    <string name="agent_chat_rtm_payload_fab">查看发往后端的 RTM 数据</string>
-    <string name="agent_chat_rtm_payload_title">发往后端的数据（ROBOT_FACE_INFO_UP）</string>
+    <string name="agent_chat_rtm_payload_title_short">RTM 上行（实时）</string>
+    <string name="agent_chat_rtm_payload_icon_cd">RTM 上行 JSON，点按展开或收起</string>
     <string name="agent_chat_rtm_payload_empty">暂无上行人脸/人体 JSON，请先连接且未占用自定义视频推流</string>
     <string name="agent_chat_rtm_payload_copy">复制 JSON</string>
 </resources>

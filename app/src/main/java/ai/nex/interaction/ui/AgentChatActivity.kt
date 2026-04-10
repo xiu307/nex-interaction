@@ -8,11 +8,11 @@ import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -34,12 +34,10 @@ import ai.conv.internal.convoai.TranscriptType
 import ai.nex.interaction.databinding.ActivityAgentChatBinding
 import ai.nex.interaction.databinding.ItemTranscriptUserBinding
 import ai.nex.interaction.databinding.ItemTranscriptAgentBinding
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import kotlin.math.roundToInt
 
 /**
  * Activity for agent chat interface
@@ -53,6 +51,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private val transcriptAdapter: TranscriptAdapter = TranscriptAdapter()
     private var videoInputPreviewView: PreviewView? = null
     private var isVideoInputStarted = false
+
+    /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
+    private var isRtmPayloadFloatExpanded = false
 
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
@@ -83,20 +84,69 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             viewModel.onFaceRtmUplinkPayload(json)
         }
 
+        observeFaceRtmPayloadFloat()
+
         lifecycleScope.launch {
             viewModel.uiState
                 .map { it.connectionState }
                 .distinctUntilChanged()
                 .collect { conn ->
                     val connected = conn == AgentChatViewModel.ConnectionState.Connected
-                    mBinding?.fabRtmPayloadInspector?.isVisible = connected
-                    if (connected) {
-                        viewModel.refreshRobotFaceRtmUplink(this@AgentChatActivity)
-                    } else {
-                        FaceRtmStreamPublisher.stopAll()
-                        viewModel.clearFaceRtmUplinkPayloadPreview()
+                    mBinding?.apply {
+                        if (!connected) {
+                            isRtmPayloadFloatExpanded = false
+                        }
+                        cardRtmPayloadFloat.isVisible = connected
+                        if (connected) {
+                            applyRtmPayloadFloatExpandedState()
+                            viewModel.refreshRobotFaceRtmUplink(this@AgentChatActivity)
+                        } else {
+                            FaceRtmStreamPublisher.stopAll()
+                            viewModel.clearFaceRtmUplinkPayloadPreview()
+                        }
                     }
                 }
+        }
+    }
+
+    /** 左侧悬浮卡片：随每次上行 JSON 刷新内容；展开时才滚动到底。 */
+    private fun observeFaceRtmPayloadFloat() {
+        lifecycleScope.launch {
+            viewModel.lastFaceRtmUplinkPayload.collect { raw ->
+                applyFaceRtmPayloadFloatText(raw)
+            }
+        }
+    }
+
+    private fun toggleRtmPayloadFloatExpanded() {
+        isRtmPayloadFloatExpanded = !isRtmPayloadFloatExpanded
+        applyRtmPayloadFloatExpandedState()
+    }
+
+    private fun applyRtmPayloadFloatExpandedState() {
+        mBinding?.apply {
+            val expanded = isRtmPayloadFloatExpanded
+            tvRtmPayloadFloatTitle.isVisible = expanded
+            btnCopyRtmPayloadFloat.isVisible = expanded
+            scrollRtmPayloadFloat.isVisible = expanded
+            val panelW = if (expanded) {
+                resources.getDimensionPixelSize(R.dimen.rtm_float_expanded_width)
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            llRtmPayloadFloatRoot.layoutParams = llRtmPayloadFloatRoot.layoutParams.apply {
+                width = panelW
+            }
+            llRtmPayloadFloatHeader.gravity = if (expanded) {
+                Gravity.CENTER_VERTICAL or Gravity.START
+            } else {
+                Gravity.CENTER
+            }
+            if (expanded) {
+                scrollRtmPayloadFloat.post {
+                    scrollRtmPayloadFloat.scrollTo(0, 0)
+                }
+            }
         }
     }
 
@@ -256,55 +306,41 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 true
             }
 
-            fabRtmPayloadInspector.setOnClickListener {
-                showFaceRtmUplinkPayloadDialog()
+            btnCopyRtmPayloadFloat.setOnClickListener {
+                val raw = viewModel.lastFaceRtmUplinkPayload.value
+                if (raw.isEmpty()) {
+                    Toast.makeText(this@AgentChatActivity, getString(R.string.agent_chat_rtm_payload_empty), Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val display = formatJsonForDisplay(raw)
+                copyPlainTextToClipboard(display, "rtm_face_uplink_json")
+                Toast.makeText(this@AgentChatActivity, getString(R.string.agent_chat_log_copied), Toast.LENGTH_SHORT).show()
             }
-            // initData 先于 initView：首帧 collect 时 mBinding 可能为 null；配置变更后 ViewModel 仍为 Connected 时须补一次可见性
-            fabRtmPayloadInspector.isVisible =
+            ivRtmPayloadFloatIcon.setOnClickListener {
+                toggleRtmPayloadFloatExpanded()
+            }
+            // initData 先于 initView：首帧 collect 时 mBinding 可能为 null；配置变更后须补一次悬浮卡片可见性与文案
+            cardRtmPayloadFloat.isVisible =
                 viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
+            isRtmPayloadFloatExpanded = false
+            applyRtmPayloadFloatExpandedState()
+            applyFaceRtmPayloadFloatText(viewModel.lastFaceRtmUplinkPayload.value)
         }
     }
 
-    /** 悬浮窗：展示最近一次经 RTM 发往服务端的人脸/人体 JSON（尝试缩进格式化）。 */
-    private fun showFaceRtmUplinkPayloadDialog() {
-        val raw = viewModel.lastFaceRtmUplinkPayload.value
-        if (raw.isEmpty()) {
-            Toast.makeText(this, getString(R.string.agent_chat_rtm_payload_empty), Toast.LENGTH_LONG).show()
-            return
-        }
-        val display = formatJsonForDisplay(raw)
-        val scroll = ScrollView(this)
-        val tv = TextView(this).apply {
-            text = display
-            setTextIsSelectable(true)
-            typeface = android.graphics.Typeface.MONOSPACE
-            textSize = 11f
-            setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.text_secondary))
-            val pad = (16 * resources.displayMetrics.density).roundToInt()
-            setPadding(pad, pad, pad, pad)
-        }
-        scroll.addView(
-            tv,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.agent_chat_rtm_payload_title)
-            .setView(scroll)
-            .setPositiveButton(R.string.agent_chat_rtm_payload_copy) { _, _ ->
-                copyPlainTextToClipboard(display, "rtm_face_uplink_json")
-                Toast.makeText(this, getString(R.string.agent_chat_log_copied), Toast.LENGTH_SHORT).show()
+    private fun applyFaceRtmPayloadFloatText(raw: String) {
+        mBinding?.apply {
+            tvRtmPayloadFloat.text = if (raw.isEmpty()) {
+                getString(R.string.agent_chat_rtm_payload_empty)
+            } else {
+                formatJsonForDisplay(raw)
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-            .also { d ->
-                val dm = resources.displayMetrics
-                val maxW = (dm.widthPixels * 0.92f).roundToInt()
-                val maxH = (dm.heightPixels * 0.72f).roundToInt()
-                d.window?.setLayout(maxW, maxH)
+            if (isRtmPayloadFloatExpanded) {
+                scrollRtmPayloadFloat.post {
+                    scrollRtmPayloadFloat.scrollTo(0, 0)
+                }
             }
+        }
     }
 
     private fun formatJsonForDisplay(raw: String): String {
