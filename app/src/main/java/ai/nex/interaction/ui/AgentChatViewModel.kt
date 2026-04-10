@@ -99,6 +99,18 @@ class AgentChatViewModel : ViewModel() {
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
     val debugLogList: StateFlow<List<String>> = _debugLogList.asStateFlow()
 
+    /** 最近一次经 RTM 发往服务端的人脸/人体上行 JSON（`ROBOT_FACE_INFO_UP`），供悬浮窗查看。 */
+    private val _lastFaceRtmUplinkPayload = MutableStateFlow("")
+    val lastFaceRtmUplinkPayload: StateFlow<String> = _lastFaceRtmUplinkPayload.asStateFlow()
+
+    fun onFaceRtmUplinkPayload(json: String) {
+        _lastFaceRtmUplinkPayload.value = json
+    }
+
+    fun clearFaceRtmUplinkPayloadPreview() {
+        _lastFaceRtmUplinkPayload.value = ""
+    }
+
     private val connection = ConnectionSessionState()
     private val agentSession = AgentSessionState()
 
@@ -695,6 +707,7 @@ class AgentChatViewModel : ViewModel() {
     /** 停止人脸 RTM 上行与自定义音频采集（挂断与 ViewModel 销毁共用）。 */
     private fun stopFaceUplinkAndExternalAudio() {
         FaceRtmStreamPublisher.stopAll()
+        clearFaceRtmUplinkPayloadPreview()
         stopExternalAudioCapture()
     }
 
