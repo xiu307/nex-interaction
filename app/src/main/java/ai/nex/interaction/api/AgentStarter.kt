@@ -118,6 +118,7 @@ object AgentStarter {
                 put("remote_rtc_uids", JSONArray(remoteRtcUids))
                 put("enable_string_uid", false)
                 put("idle_timeout", 120)
+                put("enable_dump",true)
 
                 put("advanced_features", JSONObject().apply {
                     put("enable_aivad", false)
@@ -133,7 +134,7 @@ object AgentStarter {
                 put("tts", buildTtsJson())
 
                 put("sal", JSONObject().apply {
-                    put("sal_mode", "recognition")
+                    put("sal_mode", "locking")
                     put("sample_urls", buildSalSampleUrlsJson(
                         KeyCenter.SAL_ENABLE_PERSONALIZED,
                         deviceId.toString(),
