@@ -71,7 +71,7 @@ object ConvoFacedetDock {
      * 1. 人脸库 **embedding**（[IdentityManager.deleteEmbedding]，与旧「清除注册」一致）；
      * 2. pipeline **跟踪状态**（[FaceDetector.clearFace]）。
      *
-     * 先处理 [FaceRtmStreamPublisher] 中正在运行的实例，再对注册用临时 [FaceDetector] 执行（无实时预览时也能删库）。
+     * 先处理 [FaceRtmStreamPublisher]（内部 [RobotFaceDetectionCollector]）中正在运行的实例，再对注册用临时 [FaceDetector] 执行（无实时预览时也能删库）。
      */
     fun clearFacePipelineState(context: Context, faceId: String) {
         if (faceId.isEmpty()) return

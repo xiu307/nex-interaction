@@ -37,8 +37,8 @@ object RobotFaceRtmProtocol {
         uploadSeq: Long,
         clientFlushWallMs: Long,
     ): String {
-        val facesJoined = faceResults.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
-        val bodiesJoined = bodies.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        val facesJson = jsonFacesOrEmptyString(faceResults)
+        val bodiesJson = jsonBodiesOrEmptyString(bodies)
         val ts = clientFlushWallMs.toString()
         val bodyTsPart = if (bodyFrameTimestampNs != 0L) {
             ",\"bodyFrameTimestampNs\":$bodyFrameTimestampNs"
@@ -46,10 +46,23 @@ object RobotFaceRtmProtocol {
             ""
         }
         val payloadJson =
-            "{\"faces\":[$facesJoined],\"bodies\":[$bodiesJoined]$bodyTsPart,\"uploadSeq\":$uploadSeq,\"clientFlushWallMs\":$clientFlushWallMs}"
+            "{\"faces\":$facesJson,\"bodies\":$bodiesJson$bodyTsPart,\"uploadSeq\":$uploadSeq,\"clientFlushWallMs\":$clientFlushWallMs}"
         return "{\"clientId\":${JSONObject.quote(clientId)},\"recordId\":${JSONObject.quote(recordId)},\"type\":${JSONObject.quote(TYPE_ROBOT_FACE_INFO_UP)},\"timestamp\":${JSONObject.quote(ts)},\"payload\":$payloadJson}"
     }
 
     private fun facedetJsonFragmentOrEmpty(raw: String): String =
         if (raw.isEmpty()) "\"\"" else raw
+
+    /** 无检测项时字段值为 JSON 空字符串 `""`，与 `[]` 区分。 */
+    private fun jsonFacesOrEmptyString(faceResults: List<FaceResult>): String {
+        if (faceResults.isEmpty()) return JSONObject.quote("")
+        val joined = faceResults.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        return "[$joined]"
+    }
+
+    private fun jsonBodiesOrEmptyString(bodies: List<BodyResult>): String {
+        if (bodies.isEmpty()) return JSONObject.quote("")
+        val joined = bodies.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        return "[$joined]"
+    }
 }

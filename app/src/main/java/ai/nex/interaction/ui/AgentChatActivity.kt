@@ -12,9 +12,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -32,9 +34,12 @@ import ai.conv.internal.convoai.TranscriptType
 import ai.nex.interaction.databinding.ActivityAgentChatBinding
 import ai.nex.interaction.databinding.ItemTranscriptUserBinding
 import ai.nex.interaction.databinding.ItemTranscriptAgentBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import kotlin.math.roundToInt
 
 /**
  * Activity for agent chat interface
@@ -74,15 +79,22 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         // Observe debug log changes
         observeDebugLogs()
 
+        FaceRtmStreamPublisher.debugPayloadListener = { json ->
+            viewModel.onFaceRtmUplinkPayload(json)
+        }
+
         lifecycleScope.launch {
             viewModel.uiState
                 .map { it.connectionState }
                 .distinctUntilChanged()
                 .collect { conn ->
-                    if (conn == AgentChatViewModel.ConnectionState.Connected) {
+                    val connected = conn == AgentChatViewModel.ConnectionState.Connected
+                    mBinding?.fabRtmPayloadInspector?.isVisible = connected
+                    if (connected) {
                         viewModel.refreshRobotFaceRtmUplink(this@AgentChatActivity)
                     } else {
                         FaceRtmStreamPublisher.stopAll()
+                        viewModel.clearFaceRtmUplinkPayloadPreview()
                     }
                 }
         }
@@ -243,7 +255,69 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 copyDebugLogToClipboard()
                 true
             }
+
+            fabRtmPayloadInspector.setOnClickListener {
+                showFaceRtmUplinkPayloadDialog()
+            }
+            // initData 先于 initView：首帧 collect 时 mBinding 可能为 null；配置变更后 ViewModel 仍为 Connected 时须补一次可见性
+            fabRtmPayloadInspector.isVisible =
+                viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
         }
+    }
+
+    /** 悬浮窗：展示最近一次经 RTM 发往服务端的人脸/人体 JSON（尝试缩进格式化）。 */
+    private fun showFaceRtmUplinkPayloadDialog() {
+        val raw = viewModel.lastFaceRtmUplinkPayload.value
+        if (raw.isEmpty()) {
+            Toast.makeText(this, getString(R.string.agent_chat_rtm_payload_empty), Toast.LENGTH_LONG).show()
+            return
+        }
+        val display = formatJsonForDisplay(raw)
+        val scroll = ScrollView(this)
+        val tv = TextView(this).apply {
+            text = display
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.text_secondary))
+            val pad = (16 * resources.displayMetrics.density).roundToInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        scroll.addView(
+            tv,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.agent_chat_rtm_payload_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.agent_chat_rtm_payload_copy) { _, _ ->
+                copyPlainTextToClipboard(display, "rtm_face_uplink_json")
+                Toast.makeText(this, getString(R.string.agent_chat_log_copied), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+            .also { d ->
+                val dm = resources.displayMetrics
+                val maxW = (dm.widthPixels * 0.92f).roundToInt()
+                val maxH = (dm.heightPixels * 0.72f).roundToInt()
+                d.window?.setLayout(maxW, maxH)
+            }
+    }
+
+    private fun formatJsonForDisplay(raw: String): String {
+        return try {
+            JSONObject(raw).toString(2)
+        } catch (_: Exception) {
+            raw
+        }
+    }
+
+    private fun copyPlainTextToClipboard(label: String, clipLabel: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(clipLabel, label))
     }
 
     /** 复制上方调试日志（纯文本，含 agentId 等），便于粘贴到 IM / 工单。 */
@@ -534,6 +608,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     }
 
     override fun onDestroy() {
+        FaceRtmStreamPublisher.debugPayloadListener = null
         stopVideoInput()
         cameraVideoInputManager.release()
         super.onDestroy()
