@@ -7,16 +7,14 @@ import ai.conv.internal.convoai.ConversationalAIAPIImpl
 import ai.conv.internal.convoai.IConversationalAIAPI
 import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
 import ai.conv.internal.rtc.ConversationRtcEventSink
-import ai.conv.internal.rtc.buildConversationRtcEngineConfig
-import ai.conv.internal.rtc.loadConversationRtcAiExtensions
 import ai.conv.internal.rtm.ConversationRtmEventListener
 import ai.conv.internal.rtm.ConversationRtmEventSink
 import ai.conv.internal.rtm.RtmLoginState
 import ai.conv.internal.rtm.createConversationRtmConfig
 import ai.conv.internal.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
-import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.RtcEngine
+import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtm.RtmClient
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +67,14 @@ class ConvoManager(
     logTag: String = "ConvoManager",
     channelNameProvider: () -> String
 ) {
+    private companion object {
+        /** 与对话示例一致的 AI-QoS 扩展（回声消除 / 降噪）。 */
+        val CONVERSATION_RTC_AI_EXTENSION_IDS: List<String> = listOf(
+            "ai_echo_cancellation_extension",
+            "ai_noise_suppression_extension",
+        )
+    }
+
     val rtcEngine: RtcEngineEx
     val rtmClient: RtmClient
     val conversationalAIAPI: IConversationalAIAPI
@@ -137,15 +143,23 @@ class ConvoManager(
         appId: String,
         eventHandler: ConversationRtcEngineEventHandler
     ): RtcEngineEx {
-        val rtcConfig = buildConversationRtcEngineConfig(
-            context = context,
-            appId = appId,
-            eventHandler = eventHandler
-        )
+        val rtcConfig = RtcEngineConfig().apply {
+            mContext = context
+            mAppId = appId
+            mChannelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
+            mAudioScenario = Constants.AUDIO_SCENARIO_DEFAULT
+            mEventHandler = eventHandler
+        }
 
         return (RtcEngine.create(rtcConfig) as RtcEngineEx).apply {
             enableVideo()
             loadConversationRtcAiExtensions()
+        }
+    }
+
+    private fun RtcEngineEx.loadConversationRtcAiExtensions() {
+        for (id in CONVERSATION_RTC_AI_EXTENSION_IDS) {
+            loadExtensionProvider(id)
         }
     }
 
