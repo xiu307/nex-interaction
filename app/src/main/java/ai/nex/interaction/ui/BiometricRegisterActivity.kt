@@ -17,8 +17,10 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
+import android.view.View
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
@@ -59,6 +61,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val BUFFER_MULTIPLIER = 2
+        private const val AUTO_VOICE_RECORD_MS = 6000L
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, BiometricRegisterActivity::class.java))
@@ -153,6 +156,11 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     private var faceEnginePreparedOk = false
 
     private var faceDetector: FaceDetector? = null
+    @Volatile
+    private var liveEnrollRunning = false
+    private var autoLiveEnrollAttempted = false
+    private var autoVoiceCaptureScheduled = false
+    private var lastLiveEnrollStartAtMs = 0L
 
     override fun getViewBinding(): ActivityBiometricRegisterBinding {
         return ActivityBiometricRegisterBinding.inflate(layoutInflater)
@@ -173,14 +181,22 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             } else {
                 tvFaceIdStatus.text = getString(R.string.biometric_faceid_waiting)
             }
+            // faceId 由算法分配，不允许手动编辑，避免与本地登记/OSS 映射不一致。
+            etFaceId.isFocusable = false
+            etFaceId.isFocusableInTouchMode = false
+            etFaceId.isCursorVisible = false
+            etFaceId.isLongClickable = false
+            etFaceId.keyListener = null
             etFaceId.doAfterTextChanged { refreshStepGates() }
             btnFaceFromGallery.setOnClickListener { launchFaceFromGallery() }
-            btnFaceRecord.setOnClickListener { launchFaceRecordVideo() }
+            btnFaceRecord.setOnClickListener { launchFaceLiveEnrollment() }
             btnVoiceStart.setOnClickListener { startPcmRecording() }
             btnVoiceStop.setOnClickListener { stopPcmRecordingAndUpload() }
             btnSaveRegistration.setOnClickListener { saveRegistrationBundle() }
             btnViewRegistered.setOnClickListener { BiometricRegisteredRecordsActivity.start(this@BiometricRegisterActivity) }
             tvVoiceStatus.text = getString(R.string.biometric_voice_idle)
+            // 默认走自动化动态注册流程；相册入口保留能力但隐藏到当前版本之外
+            btnFaceFromGallery.visibility = android.view.View.GONE
             refreshSaveRegistrationStatusText()
             refreshStepGates()
         }
@@ -192,6 +208,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     }
 
     override fun onDestroy() {
+        stopLiveEnrollmentIfRunning()
         stopPcmRecordingSync()
         faceEnginePreparedOk = false
         runCatching { faceDetector?.unbindCamera() }
@@ -236,6 +253,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = true)
         refreshFaceButtonsEnabled()
         refreshStepGates()
+        maybeAutoStartLiveEnrollment()
     }
 
     private fun prepareFaceDetectorLikeDemoOnCreate() {
@@ -274,6 +292,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_ready)
         }
         refreshFaceButtonsEnabled()
+        maybeAutoStartLiveEnrollment()
     }
 
     private fun initFaceDetectorIfNeeded() {
@@ -318,9 +337,22 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     }
 
     private fun launchFaceRecordVideo() {
-        if (enrollInProgress) return
-        val fd = faceDetector ?: run {
+        if (enrollInProgress || liveEnrollRunning) {
+            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_live_enroll_already_running)
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastLiveEnrollStartAtMs < 1200L) return
+        lastLiveEnrollStartAtMs = now
+        val fd = ensureLiveEnrollmentDetectorReady() ?: run {
             Toast.makeText(this, getString(R.string.biometric_lib_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (fd.isLiveEnrollmentActive()) {
+            liveEnrollRunning = true
+            enrollInProgress = true
+            refreshFaceButtonsEnabled()
+            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_live_enroll_already_running)
             return
         }
         if (fd.multiPersonRecognitionManager == null) {
@@ -329,21 +361,199 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         }
         val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
-        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!camOk || !micOk) {
-            enrollInProgress = true
-            refreshFaceButtonsEnabled()
-            mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_video_need_cam_mic)
-            requestCameraMicForVideoLauncher.launch(
-                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
-            )
+        if (!camOk) {
+            checkPermissions()
             return
         }
         enrollInProgress = true
+        liveEnrollRunning = true
         refreshFaceButtonsEnabled()
-        mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_opening_camera)
-        startVideoCaptureForEnrollment()
+        mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_live_enroll_starting)
+        ProcessCameraProvider.getInstance(this).addListener(
+            {
+                val provider = runCatching { ProcessCameraProvider.getInstance(this).get() }.getOrNull()
+                if (provider == null) {
+                    onLiveEnrollmentFailed(getString(R.string.biometric_live_enroll_bind_fail))
+                    return@addListener
+                }
+                try {
+                    mBinding?.previewLive?.visibility = View.VISIBLE
+                    mBinding?.previewFace?.visibility = View.GONE
+                    fd.bindToCameraX(provider, this, this, mBinding?.previewLive)
+                    fd.start()
+                    fd.startLiveEnrollment(
+                        false,
+                        object : com.robotchat.facedet.recognition.LiveFaceEnrollment.Callback {
+                            override fun onCaptureProgress(captured: Int, total: Int, hint: String) {
+                                if (isFinishing || isDestroyed) return
+                                mBinding?.tvFaceIdStatus?.text =
+                                    getString(R.string.biometric_live_enroll_progress, captured, total, hint)
+                            }
+
+                            override fun onEnrollmentSuccess(faceId: String, isNewUser: Boolean, quality: Float) {
+                                if (isFinishing || isDestroyed) return
+                                liveEnrollRunning = false
+                                enrollInProgress = false
+                                runCatching { fd.unbindCamera() }
+                                mBinding?.previewLive?.visibility = View.GONE
+                                mBinding?.previewFace?.visibility = View.VISIBLE
+                                mBinding?.etFaceId?.setText(faceId)
+                                BiometricSalRegistry.setLastRegisteredFaceId(faceId)
+                                // 动态注册仅拿 embedding：先写 local 占位，解锁后续声纹步骤；需要 OSS 可再走相册视频入口。
+                                BiometricSalRegistry.saveFaceIdToFaceImageUrl(
+                                    faceId,
+                                    BiometricSalRegistry.FACE_IMAGE_URL_LOCAL_ONLY,
+                                )
+                                mBinding?.tvFaceIdStatus?.text =
+                                    getString(R.string.biometric_live_enroll_success, faceId, quality)
+                                Toast.makeText(
+                                    this@BiometricRegisterActivity,
+                                    R.string.biometric_live_enroll_success_toast,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                                refreshFaceButtonsEnabled()
+                                refreshStepGates()
+                                maybeAutoStartVoiceCapture()
+                            }
+
+                            override fun onEnrollmentError(message: String) {
+                                if (isFinishing || isDestroyed) return
+                                Log.e(TAG, "Live enrollment callback error: $message")
+                                onLiveEnrollmentFailed(message)
+                            }
+                        },
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Live enrollment start exception: ${e.message}", e)
+                    onLiveEnrollmentFailed(e.message ?: getString(R.string.biometric_live_enroll_bind_fail))
+                }
+            },
+            ContextCompat.getMainExecutor(this),
+        )
+    }
+
+    private fun ensureLiveEnrollmentDetectorReady(): FaceDetector? {
+        val current = faceDetector
+        if (current != null && !current.getConfig().skipLiveMediaPipeFacePipeline) {
+            return current
+        }
+        // 当前 detector 若是“仅注册模式”（skipLive=true），动态注册前切换到可绑定相机的 live 模式。
+        runCatching {
+            current?.cancelLiveEnrollment()
+            current?.unbindCamera()
+            current?.release()
+        }
+        val liveDetector = runCatching {
+            FaceDetector(ConvoFacedetDock.configForBiometricLiveEnrollment(this)).apply {
+                setCallback(
+                    object : FrameAnalysisCallback {
+                        override fun onFaceResult(result: FaceResult) {}
+                    },
+                )
+                start()
+                prepareEngine(applicationContext)
+            }
+        }.getOrElse {
+            Log.e(TAG, "ensureLiveEnrollmentDetectorReady failed: ${it.message}", it)
+            return null
+        }
+        faceDetector = liveDetector
+        faceEnginePreparedOk = true
+        return liveDetector
+    }
+
+    private fun onLiveEnrollmentFailed(message: String) {
+        Log.e(TAG, "onLiveEnrollmentFailed: $message")
+        liveEnrollRunning = false
+        enrollInProgress = false
+        runCatching { faceDetector?.cancelLiveEnrollment() }
+        runCatching { faceDetector?.unbindCamera() }
+        mBinding?.previewLive?.visibility = View.GONE
+        mBinding?.previewFace?.visibility = View.VISIBLE
+        mBinding?.tvFaceIdStatus?.text = message
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        refreshFaceButtonsEnabled()
+    }
+
+    private fun stopLiveEnrollmentIfRunning() {
+        if (!liveEnrollRunning) return
+        liveEnrollRunning = false
+        enrollInProgress = false
+        runCatching { faceDetector?.cancelLiveEnrollment() }
+        runCatching { faceDetector?.unbindCamera() }
+        mBinding?.previewLive?.visibility = View.GONE
+        mBinding?.previewFace?.visibility = View.VISIBLE
+        mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_live_enroll_cancelled)
+        refreshFaceButtonsEnabled()
+    }
+
+    private fun launchFaceLiveEnrollment() {
+        launchFaceRecordVideo()
+    }
+
+    /**
+     * 进入注册页后自动开始动态注册（仅在无完整注册数据时触发一次）。
+     */
+    private fun maybeAutoStartLiveEnrollment() {
+        if (autoLiveEnrollAttempted) return
+        if (enrollInProgress || liveEnrollRunning) return
+        if (!faceEnginePreparedOk) return
+        if (BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls().isNotEmpty()) return
+        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!camOk) return
+        val fd = faceDetector ?: return
+        if (fd.multiPersonRecognitionManager == null) return
+        autoLiveEnrollAttempted = true
+        launchFaceLiveEnrollment()
+    }
+
+    private fun maybeAutoStartVoiceCapture() {
+        if (autoVoiceCaptureScheduled || isRecordingPcm) return
+        if (!isStep1Complete()) return
+        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!micOk) return
+        autoVoiceCaptureScheduled = true
+        mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_countdown)
+        mainHandler.postDelayed(
+            {
+                if (isFinishing || isDestroyed) return@postDelayed
+                if (!isStep1Complete() || isRecordingPcm) return@postDelayed
+                startPcmRecording()
+                mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
+                mainHandler.postDelayed(
+                    {
+                        if (isFinishing || isDestroyed) return@postDelayed
+                        if (isRecordingPcm) {
+                            stopPcmRecordingAndUpload()
+                        }
+                    },
+                    AUTO_VOICE_RECORD_MS,
+                )
+            },
+            500L,
+        )
+    }
+
+    /**
+     * 相册/动态注册按钮不可依赖「识别库已就绪」才 enabled：否则 ArcFace/Room 初始化失败时按钮永远灰色、点击无任何反馈。
+     * 识别未就绪时仍允许点击，由入口方法内 Toast 说明原因。
+     */
+    private fun refreshFaceButtonsEnabled() {
+        val m = mBinding ?: return
+        val engineReady = faceEnginePreparedOk && !enrollInProgress
+        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        // 相册选视频仅需 SAF，不要求相机/麦克风权限
+        m.btnFaceFromGallery.isEnabled = engineReady
+        // 动态注册仅需相机
+        m.btnFaceRecord.isEnabled = engineReady && camOk
+        m.btnFaceRecord.text = if (liveEnrollRunning) {
+            getString(R.string.biometric_live_enroll_cancel)
+        } else {
+            getString(R.string.biometric_face_video_record)
+        }
     }
 
     private fun startVideoCaptureForEnrollment() {
@@ -497,23 +707,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 }
             },
         )
-    }
-
-    /**
-     * 相册/录制按钮不可依赖「识别库已就绪」才 enabled：否则 ArcFace/Room 初始化失败时按钮永远灰色、点击无任何反馈。
-     * 识别未就绪时仍允许点击，由 [launchFaceFromGallery] / [launchFaceRecordVideo] 内 Toast 说明原因。
-     */
-    private fun refreshFaceButtonsEnabled() {
-        val m = mBinding ?: return
-        val engineReady = faceEnginePreparedOk && !enrollInProgress
-        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        // 相册选视频仅需 SAF，不要求相机/麦克风权限
-        m.btnFaceFromGallery.isEnabled = engineReady
-        // 系统录像需要相机+麦克风
-        m.btnFaceRecord.isEnabled = engineReady && camOk && micOk
     }
 
     private fun uploadFaceBitmapForFaceId(faceKey: String, bitmap: Bitmap) {
@@ -704,6 +897,41 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         return true
     }
 
+    /**
+     * 自动流程兜底：即便未拿到双 OSS（例如 face 动态注册仅 local://），也在步骤1+2完成时落本地快照并结束页面。
+     */
+    private fun persistRegistrationSnapshotIfLocalComplete(): Boolean {
+        val faceId = BiometricSalRegistry.getLastRegisteredFaceId() ?: return false
+        val faceUrl = BiometricSalRegistry.getFaceImageHttpUrl(faceId) ?: return false
+        val pcmUrl = BiometricSalRegistry.getPcmHttpUrl(faceId) ?: return false
+        val faceOk = BiometricSalRegistry.isHttpUrl(faceUrl) || faceUrl == BiometricSalRegistry.FACE_IMAGE_URL_LOCAL_ONLY
+        val pcmOk = BiometricSalRegistry.isHttpUrl(pcmUrl) || pcmUrl == BiometricSalRegistry.PCM_URL_LOCAL_ONLY
+        if (!faceOk || !pcmOk) return false
+        val snapshot = BiometricRegistrationSnapshot(
+            faceId = faceId,
+            faceImageOssUrl = faceUrl,
+            pcmOssUrl = pcmUrl,
+            savedAtEpochMs = System.currentTimeMillis(),
+        )
+        BiometricSalRegistry.setLastRegisteredFaceId(faceId)
+        val json = BiometricSalRegistry.saveRegistrationSnapshot(snapshot)
+        refreshSaveRegistrationStatusText()
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val f = File(workDir(), "biometric_registration.json")
+                f.writeText(json)
+            }
+        }
+        return true
+    }
+
+    private fun finishRegistrationFlowIfReady() {
+        if (persistRegistrationSnapshotIfHttpCompleteAfterOss() || persistRegistrationSnapshotIfLocalComplete()) {
+            Toast.makeText(this, R.string.biometric_register_flow_done, Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
+
     private fun refreshSaveRegistrationStatusText() {
         val snap = BiometricSalRegistry.getRegistrationSnapshot() ?: run {
             mBinding?.tvSaveRegistrationStatus?.text = ""
@@ -861,6 +1089,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 ).show()
                 refreshStepGates()
                 pcmFile = null
+                finishRegistrationFlowIfReady()
                 return@launch
             }
             val upload = runCatching {
@@ -884,14 +1113,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             if (upload.ok && !upload.url.isNullOrEmpty()) {
                 BiometricSalRegistry.saveFaceIdToPcmUrl(faceKey, upload.url!!)
                 refreshStepGates()
-                val synced = persistRegistrationSnapshotIfHttpCompleteAfterOss()
-                if (!synced) {
-                    Toast.makeText(
-                        this@BiometricRegisterActivity,
-                        getString(R.string.biometric_pcm_upload_ok, upload.url!!),
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                finishRegistrationFlowIfReady()
             } else {
                 Toast.makeText(
                     this@BiometricRegisterActivity,

@@ -1,6 +1,7 @@
 package ai.nex.interaction.ui
 
 import android.annotation.SuppressLint
+import androidx.appcompat.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -25,6 +26,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
+import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.tools.PermissionHelp
 import ai.nex.interaction.ui.widget.DebugOverlayView
@@ -53,6 +55,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private val transcriptAdapter: TranscriptAdapter = TranscriptAdapter()
     private var videoInputPreviewView: PreviewView? = null
     private var isVideoInputStarted = false
+    private var hasAutoNavigatedToBiometricRegister = false
+    private var hasShownReRegisterPrompt = false
 
     /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
     private var isRtmPayloadFloatExpanded = false
@@ -112,6 +116,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             FaceRtmStreamPublisher.stopAll()
                             viewModel.clearFaceRtmUplinkPayloadPreview()
                             updateFacePreviewFloatVisibility()
+            maybeAutoNavigateToBiometricRegister()
                         }
                     }
                 }
@@ -307,6 +312,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
             // Start button click listener
             btnStart.setOnClickListener {
+                if (!ensureBiometricRegistrationReady()) {
+                    return@setOnClickListener
+                }
                 // Generate random channel name each time joining channel
                 val channelName = AgentChatViewModel.generateRandomChannelName()
 
@@ -480,6 +488,75 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 handleMediaPermissionDenied(granted)
             }
         )
+    }
+
+    /**
+     * 前置化注册流程：未完成人脸+声纹 OSS 注册时，不进入会话，直接引导到注册页。
+     */
+    private fun ensureBiometricRegistrationReady(): Boolean {
+        if (hasUsableBiometricRegistration()) return true
+        Toast.makeText(
+            this,
+            getString(R.string.biometric_save_only_oss_hint),
+            Toast.LENGTH_LONG,
+        ).show()
+        BiometricRegisterActivity.start(this)
+        return false
+    }
+
+    /**
+     * 进入主页面即前置引导注册：首次进入时若未完成注册，自动跳转注册页。
+     * 已有完整注册（人脸图 OSS + PCM OSS）则不打断当前流程。
+     */
+    private fun maybeAutoNavigateToBiometricRegister() {
+        if (hasAutoNavigatedToBiometricRegister) return
+        if (hasUsableBiometricRegistration()) {
+            maybePromptReRegister()
+            return
+        }
+        hasAutoNavigatedToBiometricRegister = true
+        Toast.makeText(
+            this,
+            getString(R.string.biometric_save_only_oss_hint),
+            Toast.LENGTH_LONG,
+        ).show()
+        BiometricRegisterActivity.start(this)
+    }
+
+    private fun maybePromptReRegister() {
+        if (hasShownReRegisterPrompt) return
+        if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return
+        hasShownReRegisterPrompt = true
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.biometric_register_title_full))
+            .setMessage(getString(R.string.biometric_reregister_prompt_message))
+            .setNegativeButton(getString(R.string.biometric_reregister_cancel), null)
+            .setPositiveButton(getString(R.string.biometric_reregister_confirm)) { _, _ ->
+                BiometricRegisterActivity.start(this)
+            }
+            .show()
+    }
+
+    /**
+     * 会话放行条件：
+     * - 优先：存在完整 registration snapshot（支持 local:// 与 http）；
+     * - 兼容：faceId 下人脸图 + PCM 任一为 local/http 的成对数据。
+     */
+    private fun hasUsableBiometricRegistration(): Boolean {
+        val snap = BiometricSalRegistry.getRegistrationSnapshot()
+        if (snap != null && snap.faceId.isNotEmpty() &&
+            snap.faceImageOssUrl.isNotEmpty() && snap.pcmOssUrl.isNotEmpty()
+        ) {
+            return true
+        }
+        val faceId = BiometricSalRegistry.getLastRegisteredFaceId() ?: return false
+        val faceUrl = BiometricSalRegistry.getFaceImageHttpUrl(faceId).orEmpty()
+        val pcmUrl = BiometricSalRegistry.getPcmHttpUrl(faceId).orEmpty()
+        val faceOk = BiometricSalRegistry.isHttpUrl(faceUrl) ||
+            faceUrl == BiometricSalRegistry.FACE_IMAGE_URL_LOCAL_ONLY
+        val pcmOk = BiometricSalRegistry.isHttpUrl(pcmUrl) ||
+            pcmUrl == BiometricSalRegistry.PCM_URL_LOCAL_ONLY
+        return faceOk && pcmOk
     }
 
     private fun handleMediaPermissionDenied(granted: (Boolean) -> Unit) {

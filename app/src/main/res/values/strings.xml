@@ -35,7 +35,21 @@
     <string name="biometric_step1_done_hint">步骤一注册完毕</string>
     <string name="biometric_faceid_input_hint">例如 person_1</string>
     <string name="biometric_face_video_gallery">从相册选视频（推荐）</string>
-    <string name="biometric_face_video_record">或录制新视频</string>
+    <string name="biometric_face_video_record">实时动态注册（摄像头）</string>
+    <string name="biometric_live_enroll_cancel">停止动态注册</string>
+    <string name="biometric_live_enroll_starting">正在启动动态注册…请正对镜头并缓慢左右转头</string>
+    <string name="biometric_live_enroll_bind_fail">无法启动动态注册（相机绑定失败）</string>
+    <string name="biometric_live_enroll_progress">动态注册 %1$d/%2$d：%3$s</string>
+    <string name="biometric_live_enroll_success">动态注册完成：faceId=%1$s 质量=%2$.3f（可继续录制声纹）</string>
+    <string name="biometric_live_enroll_success_toast">动态注册成功</string>
+    <string name="biometric_live_enroll_cancelled">已停止动态注册</string>
+    <string name="biometric_live_enroll_already_running">动态注册进行中，请保持正对镜头并缓慢左右转头</string>
+    <string name="biometric_auto_voice_countdown">动态注册成功，正在自动开始声纹录制…</string>
+    <string name="biometric_auto_voice_recording">自动录制声纹中，请自然朗读 6 秒…</string>
+    <string name="biometric_register_flow_done">注册流程完成，正在返回会话页</string>
+    <string name="biometric_reregister_prompt_message">检测到已有注册信息，是否重新注册？</string>
+    <string name="biometric_reregister_confirm">重新注册</string>
+    <string name="biometric_reregister_cancel">取消</string>
     <string name="biometric_face_video_need_cam_mic">录制需要相机与麦克风权限</string>
     <string name="biometric_video_cancel">已取消录制或未保存视频</string>
     <string name="biometric_video_saved_to_gallery">录制视频已保存到相册（DCIM/ConversationalAI）</string>

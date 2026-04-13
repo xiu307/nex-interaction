@@ -70,14 +70,26 @@
                     android:textColor="@color/text_subtitle"
                     android:textSize="12sp" />
 
-                <ImageView
-                    android:id="@+id/preview_face"
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="200dp"
                     android:layout_marginTop="12dp"
-                    android:background="#22000000"
-                    android:contentDescription="@string/biometric_preview"
-                    android:scaleType="centerCrop" />
+                    android:background="#22000000">
+
+                    <androidx.camera.view.PreviewView
+                        android:id="@+id/preview_live"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone"
+                        android:contentDescription="@string/biometric_preview" />
+
+                    <ImageView
+                        android:id="@+id/preview_face"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/biometric_preview"
+                        android:scaleType="centerCrop" />
+                </FrameLayout>
 
                 <EditText
                     android:id="@+id/et_face_id"
