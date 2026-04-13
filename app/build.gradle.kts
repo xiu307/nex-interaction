@@ -1,3 +1,4 @@
+import com.android.build.gradle.internal.dsl.BaseAppModuleExtension
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,6 +64,16 @@ android {
     }
 }
 
+extensions.configure<BaseAppModuleExtension>("android") {
+    packagingOptions.pickFirst("lib/arm64-v8a/libc++_shared.so")
+    packagingOptions.pickFirst("lib/armeabi-v7a/libc++_shared.so")
+    packagingOptions.pickFirst("lib/x86_64/libc++_shared.so")
+
+    packagingOptions.pickFirst("lib/arm64-v8a/libonnxruntime.so")
+    packagingOptions.pickFirst("lib/armeabi-v7a/libonnxruntime.so")
+    packagingOptions.pickFirst("lib/x86_64/libonnxruntime.so")
+}
+
 /**
  * 将 [variantName] 对应目录下已生成的 APK 复制到仓库根目录 [dist-apk]，文件名追加当前时间戳（秒级）。
  * 供 **package**（打包）与 **install**（Android Studio 运行/安装，走 install* 任务）共用。
@@ -116,8 +127,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    implementation(libs.okhttp.core)
-    implementation(libs.okhttp.logging.interceptor)
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
     implementation(libs.gson)
@@ -145,8 +154,12 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     // facedet AAR（flat files() 不解析传递依赖，须与 :facedet 中声明的版本对齐）
+    // 与 ttsplayer 的 native 依赖统一到 1.19.2，避免同进程内 ONNX Runtime 符号版本冲突。
     implementation(files("libs/facedet-release.aar"))
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
+
+    // 从 AiGlasses 抽出的本地 TTS 播放能力
+    implementation(files("libs/ttsplayer_v0.0.1_2025-12-08_platform_speech.aar"))
     val mediapipe = "0.10.14"
     implementation("com.google.mediapipe:tasks-vision:$mediapipe")
     implementation("com.google.mediapipe:tasks-core:$mediapipe")
@@ -163,4 +176,8 @@ dependencies {
 
     // 阿里云 OSS（与 Android common OssTestBucketUploader 一致）
     implementation("com.aliyun.dpa:oss-android-sdk:2.9.19")
+    implementation("com.squareup.okhttp3:okhttp:4.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.9.0")
+    implementation("com.squareup.okhttp3:okhttp-sse:4.9.0")
+    implementation("com.squareup.okio:okio:2.8.0")
 }

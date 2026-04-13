@@ -12,7 +12,7 @@ constraintlayout = "2.2.0"
 shengwang-rtc = "4.5.2.8"
 shengwang-rtm = "2.2.6"
 
-okhttp = "5.0.0-alpha.14"
+okhttp = "4.9.0"
 retrofit = "2.11.0"
 converterGson = "2.11.0"
 gson = "2.11.0"

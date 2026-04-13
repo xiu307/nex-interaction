@@ -19,6 +19,7 @@ import ai.conv.internal.convoai.TranscriptRenderMode
 import ai.conv.internal.convoai.TranscriptStatus
 import ai.conv.internal.convoai.TranscriptType
 import ai.conv.internal.convoai.VpidsInfo
+import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
 import java.nio.ByteBuffer

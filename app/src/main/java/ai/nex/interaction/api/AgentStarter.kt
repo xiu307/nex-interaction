@@ -78,11 +78,11 @@ object AgentStarter {
             val response = okHttpClient.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                val errorBody = response.body.string()
+                val errorBody = response.body?.string()
                 throw RuntimeException("Start agent error: httpCode=${response.code}, httpMsg=$errorBody")
             }
 
-            val body = response.body.string()
+            val body = response.body?.string()
             val bodyJson = JSONObject(body)
             val agentId = bodyJson.optString("agent_id", "")
 
@@ -301,11 +301,11 @@ object AgentStarter {
             val response = okHttpClient.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                val errorBody = response.body.string()
+                val errorBody = response.body?.string()
                 throw RuntimeException("Stop agent error: httpCode=${response.code}, httpMsg=$errorBody")
             }
 
-            response.body.close()
+            response.body?.close()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

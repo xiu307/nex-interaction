@@ -31,7 +31,7 @@ class OssHttpStsTokenProvider(
         val req = Request.Builder().url(url).get().build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return@withContext null
-            val body = resp.body.string()
+            val body = resp.body!!.string()
             parseStsBody(body)
         }
     }

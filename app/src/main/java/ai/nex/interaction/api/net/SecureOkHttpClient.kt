@@ -9,6 +9,7 @@ import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 object SecureOkHttpClient {
     private fun createTrustManager(): X509TrustManager {
@@ -33,9 +34,9 @@ object SecureOkHttpClient {
         }
 
         return OkHttpClient.Builder()
-            .writeTimeout(writeTimeout)
-            .readTimeout(readTimeout)
-            .connectTimeout(connectTimeout)
+            .writeTimeout(writeTimeout.toJavaDuration())
+            .readTimeout(readTimeout.toJavaDuration())
+            .connectTimeout(connectTimeout.toJavaDuration())
             .sslSocketFactory(sslContext.socketFactory, trustManager)
             .hostnameVerifier { hostname, session ->
                 HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)

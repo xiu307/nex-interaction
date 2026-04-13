@@ -315,6 +315,7 @@
             android:textColor="@color/white"
             android:textSize="14sp"
             android:textStyle="bold" />
+
     </LinearLayout>
 
     <!-- 人脸预览 + RTM 上行：纵向排列，展开 RTM 时向下延伸，不与相机图标重叠 -->

@@ -202,7 +202,7 @@ class HttpLogger : Interceptor {
     private fun logResponse(response: Response, startNs: Long, url: HttpUrl, requestId: String) {
         val tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
         val responseBody = response.body
-        val contentLength = responseBody.contentLength()
+        val contentLength = responseBody?.contentLength()
         val bodySize = if (contentLength != -1L) "$contentLength-byte" else "unknown-length"
 
         val logContent = buildString {
@@ -218,11 +218,11 @@ class HttpLogger : Interceptor {
             }
 
             responseBody.let { body ->
-                val contentType = body.contentType()
+                val contentType = body?.contentType()
                 if (contentType?.type == "application" &&
                     (contentType.subtype.contains("json") || contentType.subtype.contains("xml"))
                 ) {
-                    val source = body.source()
+                    val source = body!!.source()
                     source.request(Long.MAX_VALUE)
                     val buffer = source.buffer
                     val charset = contentType.charset() ?: Charset.defaultCharset()
