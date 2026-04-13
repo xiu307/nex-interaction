@@ -133,7 +133,8 @@ object AgentStarter {
                 put("tts", buildTtsJson())
 
                 put("sal", JSONObject().apply {
-                    put("sal_mode", "locking")
+//                    put("sal_mode", "locking")
+                    put("sal_mode", "recognition")
                     put("sample_urls", buildSalSampleUrlsJson(
                         KeyCenter.SAL_ENABLE_PERSONALIZED,
                         deviceId.toString(),
