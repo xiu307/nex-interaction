@@ -395,10 +395,13 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private fun refreshFaceRtmUplinkIfNeeded() {
         if (viewModel.uiState.value.connectionState != AgentChatViewModel.ConnectionState.Connected) return
         val b = mBinding ?: return
+        // 会话连接后默认先跑“无预览”识别链路；只有用户展开悬浮预览时才绑定 PreviewView。
+        // 这样不需要点击预览也会持续有人脸 RTM 上行。
+        val bindPreview = isFacePreviewFloatExpanded && b.flFacePreviewFloatContent.isVisible
         viewModel.refreshRobotFaceRtmUplink(
             this,
-            b.faceRtmPreview,
-            b.faceRtmDebugOverlay,
+            if (bindPreview) b.faceRtmPreview else null,
+            if (bindPreview) b.faceRtmDebugOverlay else null,
         )
     }
 

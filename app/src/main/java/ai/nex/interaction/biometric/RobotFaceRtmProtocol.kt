@@ -2,7 +2,6 @@ package ai.nex.interaction.biometric
 
 import com.robotchat.facedet.model.BodyResult
 import com.robotchat.facedet.model.FaceResult
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -43,29 +42,20 @@ object RobotFaceRtmProtocol {
         uploadSeq: Long,
         clientFlushWallMs: Long,
     ): String {
-        val facesArr = JSONArray()
-        for (f in faceResults) {
-            runCatching { facesArr.put(JSONObject(f.toJson())) }
+        // 性能关键路径：不再逐条 JSONObject(parse) 重建 facedet 结果，直接拼接 toJson() 片段。
+        val facesJoined = faceResults.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        val bodiesJoined = bodies.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        val ts = clientFlushWallMs.toString()
+        val bodyTsPart = if (bodyFrameTimestampNs != 0L) {
+            ",\"bodyFrameTimestampNs\":$bodyFrameTimestampNs"
+        } else {
+            ""
         }
-        val bodiesArr = JSONArray()
-        for (b in bodies) {
-            runCatching { bodiesArr.put(JSONObject(b.toJson())) }
-        }
-        val payload = JSONObject()
-        payload.put("faces", facesArr)
-        payload.put("bodies", bodiesArr)
-        if (bodyFrameTimestampNs != 0L) {
-            payload.put("bodyFrameTimestampNs", bodyFrameTimestampNs)
-        }
-        payload.put("uploadSeq", uploadSeq)
-        payload.put("clientFlushWallMs", clientFlushWallMs)
-
-        val root = JSONObject()
-        root.put("clientId", clientId)
-        root.put("recordId", recordId)
-        root.put("type", TYPE_ROBOT_FACE_INFO_UP)
-        root.put("timestamp", clientFlushWallMs.toString())
-        root.put("payload", payload)
-        return root.toString()
+        val payloadJson =
+            "{\"faces\":[$facesJoined],\"bodies\":[$bodiesJoined]$bodyTsPart,\"uploadSeq\":$uploadSeq,\"clientFlushWallMs\":$clientFlushWallMs}"
+        return "{\"clientId\":${JSONObject.quote(clientId)},\"recordId\":${JSONObject.quote(recordId)},\"type\":${JSONObject.quote(TYPE_ROBOT_FACE_INFO_UP)},\"timestamp\":${JSONObject.quote(ts)},\"payload\":$payloadJson}"
     }
+
+    private fun facedetJsonFragmentOrEmpty(raw: String): String =
+        if (raw.isEmpty()) "\"\"" else raw
 }
