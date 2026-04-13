@@ -102,15 +102,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             isRtmPayloadFloatExpanded = false
                             isFacePreviewFloatExpanded = false
                         }
-                        cardRtmPayloadFloat.isVisible = connected
+                                               cardRtmPayloadFloat.isVisible = connected
                         if (connected) {
                             applyRtmPayloadFloatExpandedState()
                             applyFacePreviewFloatExpandedState()
-                            viewModel.refreshRobotFaceRtmUplink(
-                                this@AgentChatActivity,
-                                mBinding?.faceRtmPreview,
-                                mBinding?.faceRtmDebugOverlay,
-                            )
+                            refreshFaceRtmUplinkIfNeeded()
                             updateFacePreviewFloatVisibility()
                         } else {
                             FaceRtmStreamPublisher.stopAll()
@@ -185,6 +181,10 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 Gravity.CENTER_VERTICAL or Gravity.START
             } else {
                 Gravity.CENTER
+            }
+            if (expanded) {
+                // 收起时 flFacePreviewFloatContent 为 gone，PreviewView 无有效 Surface；展开后 post 再绑相机
+                flFacePreviewFloatContent.post { refreshFaceRtmUplinkIfNeeded() }
             }
         }
     }
@@ -377,12 +377,29 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             applyFacePreviewFloatExpandedState()
             applyFaceRtmPayloadFloatText(viewModel.lastFaceRtmUplinkPayload.value)
             updateFacePreviewFloatVisibility()
+            // collect 可能早于 initView 执行；旋转后 distinctUntilChanged 不再触发，须在此补绑相机
+            refreshFaceRtmUplinkIfNeeded()
         }
     }
 
     override fun onResume() {
         super.onResume()
         applyFaceRtmPipelineOverlayAlign()
+        refreshFaceRtmUplinkIfNeeded()
+    }
+
+    /**
+     * 已连接且未推自定义视频时，将 facedet/CameraX 绑定到**当前** Activity 与 PreviewView。
+     * 旋转重建后 [connectionState] 不变会导致 Flow 不再 emit，必须在 initView/onResume/展开预览后显式重绑，否则会黑屏。
+     */
+    private fun refreshFaceRtmUplinkIfNeeded() {
+        if (viewModel.uiState.value.connectionState != AgentChatViewModel.ConnectionState.Connected) return
+        val b = mBinding ?: return
+        viewModel.refreshRobotFaceRtmUplink(
+            this,
+            b.faceRtmPreview,
+            b.faceRtmDebugOverlay,
+        )
     }
 
     /** 与 face-detc-java MainActivity：窄屏竖屏前置预览与 DebugOverlay Y 对齐。 */
