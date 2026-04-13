@@ -2,7 +2,6 @@ package ai.nex.interaction.biometric
 
 import com.robotchat.facedet.model.BodyResult
 import com.robotchat.facedet.model.FaceResult
-import java.util.LinkedHashMap
 
 /**
  * 采集线与上传线的**唯一交汇点**：facedet 回调只写入本类；[RobotFaceInfoRtmSender] 只调用 [copySnapshot] 读取。
@@ -11,13 +10,29 @@ import java.util.LinkedHashMap
 class RobotFaceSnapshotHub : RobotFaceSnapshotSource {
 
     private val stateLock = Any()
-    private val latestByFaceId = LinkedHashMap<Int, FaceResult>()
+    // IMPORTANT: keep full-frame face list semantics.
+    // Do NOT switch back to Map keyed by faceId, or multi-person same-frame results can be overwritten.
+    private var latestFaces: List<FaceResult> = emptyList()
+    private var latestFaceFrameTimestampNs: Long = 0L
     private var latestBodies: List<BodyResult> = emptyList()
     private var latestBodyFrameTimestampNs: Long = 0L
 
     fun onFaceResult(result: FaceResult) {
         synchronized(stateLock) {
-            latestByFaceId[result.faceId] = result
+            // Keep all faces from the newest frame timestamp for RTM uplink passthrough consistency.
+            when {
+                latestFaceFrameTimestampNs == 0L || result.frameTimestampNs > latestFaceFrameTimestampNs -> {
+                    latestFaceFrameTimestampNs = result.frameTimestampNs
+                    latestFaces = arrayListOf(result)
+                }
+                result.frameTimestampNs == latestFaceFrameTimestampNs -> {
+                    val merged = ArrayList<FaceResult>(latestFaces.size + 1)
+                    merged.addAll(latestFaces)
+                    merged.add(result)
+                    latestFaces = merged
+                }
+                else -> Unit
+            }
         }
     }
 
@@ -31,7 +46,10 @@ class RobotFaceSnapshotHub : RobotFaceSnapshotSource {
     fun onNoFaceDetected(timestampMs: Long) {
         val tsNs = timestampMs * 1_000_000L
         synchronized(stateLock) {
-            latestByFaceId.entries.removeIf { (_, fr) -> fr.frameTimestampNs < tsNs }
+            if (latestFaceFrameTimestampNs < tsNs) {
+                latestFaces = emptyList()
+                latestFaceFrameTimestampNs = 0L
+            }
             if (latestBodyFrameTimestampNs < tsNs) {
                 latestBodies = emptyList()
                 latestBodyFrameTimestampNs = 0L
@@ -41,13 +59,15 @@ class RobotFaceSnapshotHub : RobotFaceSnapshotSource {
 
     fun clearFaceTrackBuffers() {
         synchronized(stateLock) {
-            latestByFaceId.clear()
+            latestFaces = emptyList()
+            latestFaceFrameTimestampNs = 0L
         }
     }
 
     fun resetAllBuffers() {
         synchronized(stateLock) {
-            latestByFaceId.clear()
+            latestFaces = emptyList()
+            latestFaceFrameTimestampNs = 0L
             latestBodies = emptyList()
             latestBodyFrameTimestampNs = 0L
         }
@@ -56,7 +76,7 @@ class RobotFaceSnapshotHub : RobotFaceSnapshotSource {
     override fun copySnapshot(): RobotFaceDetectionSnapshot {
         synchronized(stateLock) {
             return RobotFaceDetectionSnapshot(
-                faces = latestByFaceId.values.toList(),
+                faces = latestFaces.toList(),
                 bodies = latestBodies.toList(),
                 bodyFrameTimestampNs = latestBodyFrameTimestampNs,
             )

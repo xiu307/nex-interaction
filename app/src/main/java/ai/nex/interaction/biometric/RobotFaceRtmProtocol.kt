@@ -42,9 +42,11 @@ object RobotFaceRtmProtocol {
         uploadSeq: Long,
         clientFlushWallMs: Long,
     ): String {
-        // 性能关键路径：不再逐条 JSONObject(parse) 重建 facedet 结果，直接拼接 toJson() 片段。
-        val facesJoined = faceResults.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
-        val bodiesJoined = bodies.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
+        // IMPORTANT: payload must pass through facedet raw toJson() fragments.
+        // Do NOT add host-side business logic here (no filtering/sorting/dedup/field rewrite),
+        // otherwise RTM behavior may diverge from face-detc-java direct output.
+        val facesJoined = faceResults.joinToString(",") { it.toJson() }
+        val bodiesJoined = bodies.joinToString(",") { it.toJson() }
         val ts = clientFlushWallMs.toString()
         val bodyTsPart = if (bodyFrameTimestampNs != 0L) {
             ",\"bodyFrameTimestampNs\":$bodyFrameTimestampNs"
@@ -55,7 +57,4 @@ object RobotFaceRtmProtocol {
             "{\"faces\":[$facesJoined],\"bodies\":[$bodiesJoined]$bodyTsPart,\"uploadSeq\":$uploadSeq,\"clientFlushWallMs\":$clientFlushWallMs}"
         return "{\"clientId\":${JSONObject.quote(clientId)},\"recordId\":${JSONObject.quote(recordId)},\"type\":${JSONObject.quote(TYPE_ROBOT_FACE_INFO_UP)},\"timestamp\":${JSONObject.quote(ts)},\"payload\":$payloadJson}"
     }
-
-    private fun facedetJsonFragmentOrEmpty(raw: String): String =
-        if (raw.isEmpty()) "\"\"" else raw
 }
