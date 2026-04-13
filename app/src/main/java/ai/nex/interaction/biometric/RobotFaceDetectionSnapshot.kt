@@ -10,7 +10,7 @@ data class RobotFaceDetectionSnapshot(
     val bodyFrameTimestampNs: Long,
 )
 
-/** 只负责提供 [RobotFaceDetectionSnapshot]，与 RTM 无关。 */
-fun interface RobotFaceDetectionFrameProvider {
-    fun takeSnapshot(): RobotFaceDetectionSnapshot
+/** 上传线只依赖此接口，不依赖 [RobotFaceDetectionCollector]。 */
+fun interface RobotFaceSnapshotSource {
+    fun copySnapshot(): RobotFaceDetectionSnapshot
 }

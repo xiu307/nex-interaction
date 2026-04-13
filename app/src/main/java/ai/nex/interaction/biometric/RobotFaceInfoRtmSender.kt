@@ -7,16 +7,15 @@ import ai.nex.interaction.session.ConversationRtmPeers
 import io.agora.rtm.RtmClient
 
 /**
- * 只负责按周期从 [RobotFaceDetectionFrameProvider] 取 [RobotFaceDetectionSnapshot]（当前缓冲的快照，见 [RobotFaceDetectionSnapshot]），
- * 经 [RobotFaceRtmProtocol] 拼 `ROBOT_FACE_INFO_UP` 并发 RTM。不绑定相机、不接触 [FaceDetector]。
- * 快照里某类列表为空时，协议层将对应字段序列化为 JSON 空字符串 `""`（非 `[]`）。
+ * **上传线**：按周期从 [RobotFaceSnapshotSource] 拷贝 [RobotFaceDetectionSnapshot]，经 [RobotFaceRtmProtocol] 发 RTM。
+ * 不绑定相机、不接触 [FaceDetector]、不依赖采集器类名。
  */
 class RobotFaceInfoRtmSender(
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
 ) {
 
     private var running = false
-    private var frameProvider: RobotFaceDetectionFrameProvider? = null
+    private var snapshotSource: RobotFaceSnapshotSource? = null
     private var rtmClient: RtmClient? = null
     private var peerUserId: String = ConversationRtmPeers.GEELY_RTM_SERVER_USER_ID
     private var clientIdStr: String = ""
@@ -33,7 +32,7 @@ class RobotFaceInfoRtmSender(
     }
 
     fun start(
-        frameProvider: RobotFaceDetectionFrameProvider,
+        snapshotSource: RobotFaceSnapshotSource,
         rtmClient: RtmClient,
         clientId: String,
         recordId: String,
@@ -42,7 +41,7 @@ class RobotFaceInfoRtmSender(
     ) {
         stop()
         this.running = true
-        this.frameProvider = frameProvider
+        this.snapshotSource = snapshotSource
         this.rtmClient = rtmClient
         this.peerUserId = peerUserId
         this.clientIdStr = clientId
@@ -57,7 +56,7 @@ class RobotFaceInfoRtmSender(
         running = false
         mainHandler.removeCallbacks(tickRunnable)
         uploadSeq = 0L
-        frameProvider = null
+        snapshotSource = null
         rtmClient = null
         onDebugPayload = null
         Log.d(TAG, "RTM sender stopped")
@@ -65,8 +64,8 @@ class RobotFaceInfoRtmSender(
 
     private fun flushAndSend() {
         val client = rtmClient ?: return
-        val provider = frameProvider ?: return
-        val snap = provider.takeSnapshot()
+        val source = snapshotSource ?: return
+        val snap = source.copySnapshot()
         uploadSeq += 1
         val wallMs = System.currentTimeMillis()
         val json = RobotFaceRtmProtocol.buildRobotFaceInfoUpFromFacedet(

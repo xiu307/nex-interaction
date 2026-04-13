@@ -2,9 +2,15 @@ package ai.nex.interaction.biometric
 
 import com.robotchat.facedet.model.BodyResult
 import com.robotchat.facedet.model.FaceResult
+import org.json.JSONArray
 import org.json.JSONObject
 
-/** RTM 业务 JSON：`ROBOT_FACE_INFO_UP` / `ROBOT_FACE_SPEAKER_BIND`（与 Android convoai 一致）。 */
+/**
+ * RTM 文本正文：`ROBOT_FACE_INFO_UP` / `ROBOT_FACE_SPEAKER_BIND`。
+ *
+ * `payload.faces` / `payload.bodies`：**直接透传** facedet 的 [FaceResult.toJson] / [BodyResult.toJson] 解析为 JSON 数组元素，
+ * 不在宿主侧按业务再排序、去重或改字段（与 Demo IDE 是否一致由 facedet 输出本身决定）。
+ */
 object RobotFaceRtmProtocol {
 
     const val TYPE_ROBOT_FACE_INFO_UP = "ROBOT_FACE_INFO_UP"
@@ -37,32 +43,29 @@ object RobotFaceRtmProtocol {
         uploadSeq: Long,
         clientFlushWallMs: Long,
     ): String {
-        val facesJson = jsonFacesOrEmptyString(faceResults)
-        val bodiesJson = jsonBodiesOrEmptyString(bodies)
-        val ts = clientFlushWallMs.toString()
-        val bodyTsPart = if (bodyFrameTimestampNs != 0L) {
-            ",\"bodyFrameTimestampNs\":$bodyFrameTimestampNs"
-        } else {
-            ""
+        val facesArr = JSONArray()
+        for (f in faceResults) {
+            runCatching { facesArr.put(JSONObject(f.toJson())) }
         }
-        val payloadJson =
-            "{\"faces\":$facesJson,\"bodies\":$bodiesJson$bodyTsPart,\"uploadSeq\":$uploadSeq,\"clientFlushWallMs\":$clientFlushWallMs}"
-        return "{\"clientId\":${JSONObject.quote(clientId)},\"recordId\":${JSONObject.quote(recordId)},\"type\":${JSONObject.quote(TYPE_ROBOT_FACE_INFO_UP)},\"timestamp\":${JSONObject.quote(ts)},\"payload\":$payloadJson}"
-    }
+        val bodiesArr = JSONArray()
+        for (b in bodies) {
+            runCatching { bodiesArr.put(JSONObject(b.toJson())) }
+        }
+        val payload = JSONObject()
+        payload.put("faces", facesArr)
+        payload.put("bodies", bodiesArr)
+        if (bodyFrameTimestampNs != 0L) {
+            payload.put("bodyFrameTimestampNs", bodyFrameTimestampNs)
+        }
+        payload.put("uploadSeq", uploadSeq)
+        payload.put("clientFlushWallMs", clientFlushWallMs)
 
-    private fun facedetJsonFragmentOrEmpty(raw: String): String =
-        if (raw.isEmpty()) "\"\"" else raw
-
-    /** 无检测项时字段值为 JSON 空字符串 `""`，与 `[]` 区分。 */
-    private fun jsonFacesOrEmptyString(faceResults: List<FaceResult>): String {
-        if (faceResults.isEmpty()) return JSONObject.quote("")
-        val joined = faceResults.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
-        return "[$joined]"
-    }
-
-    private fun jsonBodiesOrEmptyString(bodies: List<BodyResult>): String {
-        if (bodies.isEmpty()) return JSONObject.quote("")
-        val joined = bodies.joinToString(",") { facedetJsonFragmentOrEmpty(it.toJson()) }
-        return "[$joined]"
+        val root = JSONObject()
+        root.put("clientId", clientId)
+        root.put("recordId", recordId)
+        root.put("type", TYPE_ROBOT_FACE_INFO_UP)
+        root.put("timestamp", clientFlushWallMs.toString())
+        root.put("payload", payload)
+        return root.toString()
     }
 }

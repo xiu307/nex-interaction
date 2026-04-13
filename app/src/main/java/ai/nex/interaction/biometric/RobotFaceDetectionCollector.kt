@@ -3,52 +3,80 @@ package ai.nex.interaction.biometric
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import ai.nex.interaction.ui.widget.DebugOverlayView
 import com.robotchat.facedet.FaceDetector
 import com.robotchat.facedet.callback.FrameAnalysisCallback
 import com.robotchat.facedet.model.BodyResult
 import com.robotchat.facedet.model.FaceResult
+import java.util.ArrayList
 import java.util.LinkedHashMap
 
 /**
- * 只负责 facedet + CameraX：写入算法回调结果，供发送侧通过 [takeSnapshot] 取最后一帧聚合数据。
- * 不引用 RTM、不拼 JSON。
+ * **采集线**：facedet + CameraX，结果写入 [RobotFaceSnapshotHub]；与 RTM 上行共用同一缓冲。
+ *
+ * 可选 [previewView] / [debugOverlay]：与 face-detc-java MainActivity「实时」Tab 一致，且与 [hub] 中数据同源；
+ * 悬浮窗里的 JSON 仍由 [RobotFaceInfoRtmSender] 对 [RobotFaceSnapshotSource.copySnapshot] 调用
+ * [RobotFaceRtmProtocol.buildRobotFaceInfoUpFromFacedet] 生成，保证**预览画面 + 叠加层 + RTM 正文**一致。
  */
-class RobotFaceDetectionCollector : RobotFaceDetectionFrameProvider {
-
-    private val stateLock = Any()
-    private val latestByFaceId = LinkedHashMap<Int, FaceResult>()
-    private var latestBodies: List<BodyResult> = emptyList()
-    private var latestBodyFrameTimestampNs: Long = 0L
+class RobotFaceDetectionCollector(
+    private val hub: RobotFaceSnapshotHub,
+) {
 
     private var faceDetector: FaceDetector? = null
+    private val overlayLastByFaceId = LinkedHashMap<Int, FaceResult>()
 
-    override fun takeSnapshot(): RobotFaceDetectionSnapshot {
-        synchronized(stateLock) {
-            return RobotFaceDetectionSnapshot(
-                faces = latestByFaceId.values.toList(),
-                bodies = latestBodies.toList(),
-                bodyFrameTimestampNs = latestBodyFrameTimestampNs,
-            )
-        }
-    }
-
-    fun start(activity: AppCompatActivity, clientId: String, recordId: String) {
+    fun start(
+        activity: AppCompatActivity,
+        clientId: String,
+        recordId: String,
+        previewView: PreviewView? = null,
+        debugOverlay: DebugOverlayView? = null,
+    ) {
         stop()
+        overlayLastByFaceId.clear()
         val detector = FaceDetector(ConvoFacedetDock.configForLiveSession(activity, clientId))
         detector.setRecordId(recordId)
+        val overlay = debugOverlay
         detector.setCallback(
             object : FrameAnalysisCallback {
                 override fun onFaceResult(result: FaceResult) {
-                    synchronized(stateLock) {
-                        latestByFaceId[result.faceId] = result
+                    hub.onFaceResult(result)
+                    if (overlay != null) {
+                        overlayLastByFaceId[result.faceId] = result
+                        overlay.updateFaces(ArrayList(overlayLastByFaceId.values))
+                    }
+                }
+
+                override fun onTrackingStatus(activeFaceIds: List<Int>, activeBodyIds: List<Int>) {
+                    if (overlay != null) {
+                        val activeSet = activeFaceIds.toHashSet()
+                        overlayLastByFaceId.keys.retainAll(activeSet)
+                        overlay.pruneStale(activeSet)
                     }
                 }
 
                 override fun onBodyResults(bodies: List<BodyResult>, frameTimestampNs: Long) {
-                    synchronized(stateLock) {
-                        latestBodies = ArrayList(bodies)
-                        latestBodyFrameTimestampNs = frameTimestampNs
+                    hub.onBodyResults(bodies, frameTimestampNs)
+                    overlay?.updateBodies(bodies)
+                }
+
+                override fun onFaceLandmarks(
+                    faceId: Int,
+                    landmarks: Array<FloatArray>,
+                    frameW: Int,
+                    frameH: Int,
+                    rotationDegrees: Int,
+                ) {
+                    overlay?.setFaceLandmarks(faceId, landmarks, frameW, frameH, rotationDegrees)
+                }
+
+                override fun onNoFaceDetected(timestampMs: Long) {
+                    hub.onNoFaceDetected(timestampMs)
+                    if (overlay != null) {
+                        overlayLastByFaceId.clear()
+                        overlay.clear()
                     }
                 }
             },
@@ -59,10 +87,14 @@ class RobotFaceDetectionCollector : RobotFaceDetectionFrameProvider {
             {
                 try {
                     val provider = future.get()
-                    detector.bindToCameraX(provider, activity, activity)
+                    if (previewView != null) {
+                        detector.bindToCameraX(provider, activity, activity, previewView)
+                    } else {
+                        detector.bindToCameraX(provider, activity, activity)
+                    }
                     detector.start()
                     faceDetector = detector
-                    Log.d(TAG, "FaceDetector bound (collector only)")
+                    Log.d(TAG, "FaceDetector bound (hub + optional preview)")
                 } catch (e: Exception) {
                     Log.e(TAG, "FaceDetector bind failed: ${e.message}")
                     detector.release()
@@ -78,11 +110,8 @@ class RobotFaceDetectionCollector : RobotFaceDetectionFrameProvider {
         } catch (_: Exception) {
         }
         faceDetector = null
-        synchronized(stateLock) {
-            latestByFaceId.clear()
-            latestBodies = emptyList()
-            latestBodyFrameTimestampNs = 0L
-        }
+        overlayLastByFaceId.clear()
+        hub.resetAllBuffers()
         Log.d(TAG, "Collector stopped")
     }
 
@@ -114,7 +143,7 @@ class RobotFaceDetectionCollector : RobotFaceDetectionFrameProvider {
     fun clearAllFacesIfRunning() {
         runCatching { faceDetector?.clearAllFaces() }
             .onFailure { Log.w(TAG, "clearAllFacesIfRunning: ${it.message}") }
-        synchronized(stateLock) { latestByFaceId.clear() }
+        hub.clearFaceTrackBuffers()
     }
 
     companion object {

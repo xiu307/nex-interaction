@@ -35,6 +35,9 @@ import ai.conv.internal.convoai.Metric
 import ai.conv.internal.convoai.VoiceprintStateChangeEvent
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
+import ai.nex.interaction.ui.widget.DebugOverlayView
+import androidx.camera.view.PreviewView
+import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
 import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtc.joinConversationChannelWithOptions
 import ai.conv.internal.rtm.ConversationRtmEventSink
@@ -525,7 +528,11 @@ class AgentChatViewModel : ViewModel() {
      * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
      * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
      */
-    fun refreshRobotFaceRtmUplink(activity: AppCompatActivity) {
+    fun refreshRobotFaceRtmUplink(
+        activity: AppCompatActivity,
+        rtmFacePreviewView: PreviewView? = null,
+        rtmFaceDebugOverlay: DebugOverlayView? = null,
+    ) {
         if (_uiState.value.connectionState != ConnectionState.Connected) {
             FaceRtmStreamPublisher.stopAll()
             return
@@ -540,6 +547,8 @@ class AgentChatViewModel : ViewModel() {
             rtmClient = manager.rtmClient,
             clientId = rtmReportClientId(),
             recordId = connection.channelName,
+            previewView = rtmFacePreviewView,
+            debugOverlay = rtmFaceDebugOverlay,
         )
     }
 

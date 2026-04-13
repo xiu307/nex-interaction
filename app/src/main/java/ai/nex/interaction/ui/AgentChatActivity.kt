@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -26,6 +27,7 @@ import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.tools.PermissionHelp
+import ai.nex.interaction.ui.widget.DebugOverlayView
 import ai.nex.interaction.ui.common.BaseActivity
 import ai.nex.interaction.video.CameraVideoInputManager
 import ai.conv.internal.convoai.AgentState
@@ -54,6 +56,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
     private var isRtmPayloadFloatExpanded = false
+
+    /** 人脸实时预览悬浮窗：与 RTM 同款，默认仅相机图标 */
+    private var isFacePreviewFloatExpanded = false
 
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
@@ -95,14 +100,18 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     mBinding?.apply {
                         if (!connected) {
                             isRtmPayloadFloatExpanded = false
+                            isFacePreviewFloatExpanded = false
                         }
-                        cardRtmPayloadFloat.isVisible = connected
+                                               cardRtmPayloadFloat.isVisible = connected
                         if (connected) {
                             applyRtmPayloadFloatExpandedState()
-                            viewModel.refreshRobotFaceRtmUplink(this@AgentChatActivity)
+                            applyFacePreviewFloatExpandedState()
+                            refreshFaceRtmUplinkIfNeeded()
+                            updateFacePreviewFloatVisibility()
                         } else {
                             FaceRtmStreamPublisher.stopAll()
                             viewModel.clearFaceRtmUplinkPayloadPreview()
+                            updateFacePreviewFloatVisibility()
                         }
                     }
                 }
@@ -146,6 +155,36 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 scrollRtmPayloadFloat.post {
                     scrollRtmPayloadFloat.scrollTo(0, 0)
                 }
+            }
+        }
+    }
+
+    private fun toggleFacePreviewFloatExpanded() {
+        isFacePreviewFloatExpanded = !isFacePreviewFloatExpanded
+        applyFacePreviewFloatExpandedState()
+    }
+
+    private fun applyFacePreviewFloatExpandedState() {
+        mBinding?.apply {
+            val expanded = isFacePreviewFloatExpanded
+            tvFacePreviewFloatTitle.isVisible = expanded
+            flFacePreviewFloatContent.isVisible = expanded
+            val panelW = if (expanded) {
+                resources.getDimensionPixelSize(R.dimen.rtm_float_expanded_width)
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            llFacePreviewFloatRoot.layoutParams = llFacePreviewFloatRoot.layoutParams.apply {
+                width = panelW
+            }
+            llFacePreviewFloatHeader.gravity = if (expanded) {
+                Gravity.CENTER_VERTICAL or Gravity.START
+            } else {
+                Gravity.CENTER
+            }
+            if (expanded) {
+                // 收起时 flFacePreviewFloatContent 为 gone，PreviewView 无有效 Surface；展开后 post 再绑相机
+                flFacePreviewFloatContent.post { refreshFaceRtmUplinkIfNeeded() }
             }
         }
     }
@@ -200,6 +239,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         cameraVideoInputManager.start(videoInputPreviewView ?: return)
         isVideoInputStarted = true
         updateVideoInputButton()
+        updateFacePreviewFloatVisibility()
     }
 
     private fun stopVideoInput() {
@@ -212,7 +252,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         videoInputPreviewView = null
         isVideoInputStarted = false
         updateVideoInputButton()
-        viewModel.refreshRobotFaceRtmUplink(this)
+        viewModel.refreshRobotFaceRtmUplink(
+            this,
+            mBinding?.faceRtmPreview,
+            mBinding?.faceRtmDebugOverlay,
+        )
+        updateFacePreviewFloatVisibility()
     }
 
     private fun updateVideoInputButton() {
@@ -255,6 +300,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     override fun initView() {
         mBinding?.apply {
             setOnApplyWindowInsetsListener(root)
+            faceRtmPreview.scaleType = PreviewView.ScaleType.FILL_CENTER
 
             // Setup RecyclerView for transcript list
             setupRecyclerView()
@@ -319,12 +365,60 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             ivRtmPayloadFloatIcon.setOnClickListener {
                 toggleRtmPayloadFloatExpanded()
             }
+            ivFacePreviewFloatIcon.setOnClickListener {
+                toggleFacePreviewFloatExpanded()
+            }
             // initData 先于 initView：首帧 collect 时 mBinding 可能为 null；配置变更后须补一次悬浮卡片可见性与文案
             cardRtmPayloadFloat.isVisible =
                 viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
             isRtmPayloadFloatExpanded = false
+            isFacePreviewFloatExpanded = false
             applyRtmPayloadFloatExpandedState()
+            applyFacePreviewFloatExpandedState()
             applyFaceRtmPayloadFloatText(viewModel.lastFaceRtmUplinkPayload.value)
+            updateFacePreviewFloatVisibility()
+            // collect 可能早于 initView 执行；旋转后 distinctUntilChanged 不再触发，须在此补绑相机
+            refreshFaceRtmUplinkIfNeeded()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyFaceRtmPipelineOverlayAlign()
+        refreshFaceRtmUplinkIfNeeded()
+    }
+
+    /**
+     * 已连接且未推自定义视频时，将 facedet/CameraX 绑定到**当前** Activity 与 PreviewView。
+     * 旋转重建后 [connectionState] 不变会导致 Flow 不再 emit，必须在 initView/onResume/展开预览后显式重绑，否则会黑屏。
+     */
+    private fun refreshFaceRtmUplinkIfNeeded() {
+        if (viewModel.uiState.value.connectionState != AgentChatViewModel.ConnectionState.Connected) return
+        val b = mBinding ?: return
+        viewModel.refreshRobotFaceRtmUplink(
+            this,
+            b.faceRtmPreview,
+            b.faceRtmDebugOverlay,
+        )
+    }
+
+    /** 与 face-detc-java MainActivity：窄屏竖屏前置预览与 DebugOverlay Y 对齐。 */
+    private fun applyFaceRtmPipelineOverlayAlign() {
+        val overlay = mBinding?.faceRtmDebugOverlay ?: return
+        val sw = resources.configuration.smallestScreenWidthDp
+        val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        overlay.setInvertPreviewY(sw < 600 && portrait)
+    }
+
+    /** 人脸上行管线可用时展示（已连接且未占用自定义视频）；隐藏时收起展开态。 */
+    private fun updateFacePreviewFloatVisibility() {
+        val b = mBinding ?: return
+        val connected = viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
+        val show = connected && !isVideoInputStarted
+        b.cardFacePreviewFloat.isVisible = show
+        if (!show) {
+            isFacePreviewFloatExpanded = false
+            applyFacePreviewFloatExpandedState()
         }
     }
 
