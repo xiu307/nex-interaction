@@ -13,15 +13,16 @@ import com.robotchat.facedet.model.FaceResult
  *
  * ## 与 face-detc-java 新架构的对接要点（功能 + 不崩）
  *
- * 1. **AAR 必须带 assets**：`DetectorPipeline.initialize` 会先建 [MultiPersonRecognitionManager]，
- *    其依赖 **ArcFace**（`models/arcface.tflite`）与 MediaPipe（`models` 目录下 `.task` 模型）。若 AAR 未打入这些文件，
- *    初始化会失败，宿主表现为「识别模块未就绪」且 [FaceDetector.getLastRecognitionInitFailureMessage] 有具体原因。
+ * 1. **AAR + 宿主依赖**：`DetectorPipeline.initialize` 会建 [MultiPersonRecognitionManager]，其依赖
+ *    InsightFace **`models/w600k_mbf.onnx`**（ONNX Runtime，宿主 `build.gradle` 已显式依赖 `onnxruntime-android`）
+ *    与 MediaPipe（`models` 下 `.task`）。若 AAR 未打入这些 assets，初始化失败，表现为「识别模块未就绪」，
+ *    见 [FaceDetector.getLastRecognitionInitFailureMessage]。
  * 2. **打 AAR**：在 `face-detc-java` 根目录执行 `./gradlew :facedet:assembleRelease`。
- *    构建会跑 `downloadFacedetModels`（已挂到 `preBuild`）并合并到 AAR；**ArcFace** 需任选其一：
- *    - 将团队提供的 `arcface.tflite` 放到 `facedet/vendor/arcface.tflite`，或
- *    - 在 `face-detc-java/gradle.properties` 设置 `FACEDET_ARCFACE_TFLITE_URL` / `FACEDET_ARCFACE_TFLITE_FILE`。
+ *    `downloadFacedetModels` 会拉取 `.task` 与 ONNX；**w600k_mbf.onnx** 任选其一：
+ *    - 放到 `facedet/vendor/w600k_mbf.onnx`，或
+ *    - `gradle.properties` 中 `FACEDET_RECOGNITION_ONNX_URL` / `FACEDET_RECOGNITION_ONNX_FILE`。
  * 3. **注册页**：[FaceDetectorConfig.skipLiveMediaPipeFacePipeline] = true，不创建 LIVE_STREAM MediaPipe，
- *    避免部分机型 native 崩溃；**相册/视频注册**仍走 [FaceLandmarkerPhoto]（VIDEO）+ ArcFace + Room，与实时会话配置分离。
+ *    避免部分机型 native 崩溃；**相册/视频注册**仍走 [FaceLandmarkerPhoto]（VIDEO）+ InsightFace ONNX + Room，与实时会话配置分离。
  * 4. 将生成的 `facedet/build/outputs/aar/facedet-release.aar` 覆盖本模块 `app/libs/facedet-release.aar` 后重编宿主。
  */
 object ConvoFacedetDock {

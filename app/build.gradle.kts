@@ -51,8 +51,8 @@ android {
         jvmTarget = "17"
     }
 
-    // facedet 运行时从 assets 加载 models/arcface.tflite 与 .task；若 AAR 未带齐资源，可从本仓库 sibling 的
-    // face-detc-java 在运行 :facedet:downloadFacedetModels（并放置 vendor/arcface.tflite）后生成的目录合并进 APK。
+    // facedet 运行时从 assets 加载 models/w600k_mbf.onnx 与 MediaPipe .task；本地 AAR 未带齐时可合并 sibling
+    // face-detc-java 在 :facedet:downloadFacedetModels 后生成的 facedet/build/generated/facedetAssets/assets。
     sourceSets {
         getByName("main") {
             val facedetGeneratedAssets = rootProject.file("../face-detc-java/facedet/build/generated/facedetAssets/assets")
@@ -144,8 +144,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // facedet AAR（与 Android/scenes/convoai 对齐的传递依赖）
+    // facedet AAR（flat files() 不解析传递依赖，须与 :facedet 中声明的版本对齐）
     implementation(files("libs/facedet-release.aar"))
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
     val mediapipe = "0.10.14"
     implementation("com.google.mediapipe:tasks-vision:$mediapipe")
     implementation("com.google.mediapipe:tasks-core:$mediapipe")

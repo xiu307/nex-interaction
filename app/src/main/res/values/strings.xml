@@ -111,4 +111,7 @@
     <string name="agent_chat_rtm_payload_icon_cd">RTM 上行 JSON，点按展开或收起</string>
     <string name="agent_chat_rtm_payload_empty">暂无上行人脸/人体 JSON，请先连接且未占用自定义视频推流</string>
     <string name="agent_chat_rtm_payload_copy">复制 JSON</string>
+    <string name="agent_chat_face_rtm_preview_cd">与 RTM 同管线的相机预览（ROBOT_FACE_INFO_UP）</string>
+    <string name="agent_chat_face_preview_icon_cd">人脸实时预览，点按展开或收起</string>
+    <string name="agent_chat_face_preview_title_short">人脸预览（同 RTM 管线）</string>
 </resources>
