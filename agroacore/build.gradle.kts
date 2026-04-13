@@ -1,6 +1,6 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -23,11 +23,11 @@ android {
 }
 
 dependencies {
-    api(libs.shengwang.rtc.full)
-    api(libs.shengwang.rtm.lite)
-    api(libs.kotlinx.coroutines.android)
+    implementation("io.agora.rtc:agora-special-full:4.5.2.8")
+    implementation("io.agora:agora-rtm-lite:2.2.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("com.google.code.gson:gson:2.11.0")
 
-    implementation(libs.gson)
-
-    testImplementation(libs.junit)
+    testImplementation("junit:junit:4.13.2")
 }
