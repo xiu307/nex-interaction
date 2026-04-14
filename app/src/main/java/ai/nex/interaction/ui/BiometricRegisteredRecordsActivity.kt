@@ -2,6 +2,8 @@ package ai.nex.interaction.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -53,6 +55,21 @@ class BiometricRegisteredRecordsActivity : BaseActivity<ActivityBiometricRegiste
     }
 
     override fun initData() {}
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_biometric_registered_records, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_clear_all_records -> {
+                confirmClearAll()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -126,6 +143,21 @@ class BiometricRegisteredRecordsActivity : BaseActivity<ActivityBiometricRegiste
                 playingButton = null
                 refreshList()
                 Toast.makeText(this, R.string.biometric_record_delete_ok, Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    private fun confirmClearAll() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.biometric_record_clear_all_title)
+            .setMessage(R.string.biometric_record_clear_all_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.biometric_record_clear_all) { _, _ ->
+                BiometricSalRegistry.clearAllRegistration()
+                pcmPlayer.stop()
+                playingButton = null
+                refreshList()
+                Toast.makeText(this, R.string.biometric_record_clear_all_ok, Toast.LENGTH_SHORT).show()
             }
             .show()
     }

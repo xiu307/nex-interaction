@@ -90,7 +90,7 @@ object BiometricSalRegistry {
     }
 
     /**
-     * SAL 云端只认 **http(s)** 的人脸图 URL + PCM URL；仅本地注册（`local://` 或缺 OSS）不会进入此 Map。
+     * SAL `sample_urls` 仅要求 PCM 为 **http(s)**；face URL 只要有值即可（允许 `local://`）。
      */
     fun getCompleteSalFaceIdToPcmUrls(): Map<String, String> {
         val pcmMap = loadMap()
@@ -101,7 +101,7 @@ object BiometricSalRegistry {
                 if (faceId.isEmpty()) continue
                 val pcm = pcmMap[faceId]?.trim().orEmpty()
                 val faceImg = faceMap[faceId]?.trim().orEmpty()
-                if (pcm.isNotEmpty() && faceImg.isNotEmpty() && isHttpUrl(pcm) && isHttpUrl(faceImg)) {
+                if (pcm.isNotEmpty() && faceImg.isNotEmpty() && isHttpUrl(pcm)) {
                     put(faceId, pcm)
                 }
             }
@@ -130,7 +130,7 @@ object BiometricSalRegistry {
         e.commit()
     }
 
-    /** 本地注册页有 URL 映射，但尚无同时满足 http 的人脸图+PCM（例如仅 OSS 未配置）。用于诊断 sample_urls 为何不含你的 faceId。 */
+    /** 本地注册页有 URL 映射，但 PCM 尚未满足 http(s)。用于诊断 sample_urls 为何不含你的 faceId。 */
     fun hasLocalRegistrationButNoHttpSalPair(): Boolean {
         val complete = getCompleteSalFaceIdToPcmUrls()
         if (complete.isNotEmpty()) return false
@@ -142,8 +142,8 @@ object BiometricSalRegistry {
             val pcm = pcmMap[fid]?.trim().orEmpty()
             val faceImg = faceMap[fid]?.trim().orEmpty()
             val hasAny = pcm.isNotEmpty() || faceImg.isNotEmpty()
-            val doubleHttp = isHttpUrl(pcm) && isHttpUrl(faceImg)
-            hasAny && !doubleHttp
+            val salReadyByNewRule = pcm.isNotEmpty() && faceImg.isNotEmpty() && isHttpUrl(pcm)
+            hasAny && !salReadyByNewRule
         }
     }
 

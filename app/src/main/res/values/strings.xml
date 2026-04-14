@@ -108,6 +108,10 @@
     <string name="biometric_record_delete">删除</string>
     <string name="biometric_record_delete_title">删除本条？</string>
     <string name="biometric_record_delete_message">将移除该 faceId 的本地映射与快照，并删除人脸库中对应 embedding、清除 pipeline 中该人跟踪状态。此操作不可恢复。</string>
+    <string name="biometric_record_clear_all">清空全部</string>
+    <string name="biometric_record_clear_all_title">清空所有记录？</string>
+    <string name="biometric_record_clear_all_message">将清空全部 faceId 的本地映射与快照，并清除算法侧人脸库 embedding 与跟踪状态。此操作不可恢复。</string>
+    <string name="biometric_record_clear_all_ok">已清空全部记录</string>
     <string name="biometric_record_pcm_cannot_preview">仅支持 http(s) OSS 上的 raw PCM（16k/16bit/单声道），当前无法试听</string>
     <string name="biometric_record_delete_ok">已删除该条</string>
     <string name="biometric_no_registered_rows">暂无登记条目（未完成步骤或已清除数据）。</string>

@@ -132,13 +132,14 @@ object AgentStarter {
 
                 put("tts", buildTtsJson())
 
+                var hehe = buildSalSampleUrlsJson(
+                   KeyCenter.SAL_ENABLE_PERSONALIZED,
+                   deviceId.toString(),
+               )
                 put("sal", JSONObject().apply {
 //                    put("sal_mode", "locking")
                     put("sal_mode", "recognition")
-                    put("sample_urls", buildSalSampleUrlsJson(
-                        KeyCenter.SAL_ENABLE_PERSONALIZED,
-                        deviceId.toString(),
-                    ))
+                    put("sample_urls",hehe )
                 })
 
                 put("turn_detection", buildTurnDetectionJson())
@@ -171,8 +172,8 @@ object AgentStarter {
         if (registryComplete.isEmpty() && BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()) {
             Log.w(
                 TAG,
-                "SAL: 本地有人脸/声纹记录，但人脸图与 PCM 均须为 http(s) OSS URL 才会进入 sample_urls；" +
-                    "仅 local:// 或未上传 OSS 时云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。",
+                "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" +
+                    "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。",
             )
         }
         val hasBiometricEntries = biometricJson.keys().asSequence().any { k ->
@@ -188,7 +189,7 @@ object AgentStarter {
             val v = biometricJson.optString(key, "")
             if (key.isNotEmpty() && v.isNotEmpty()) out.put(key, v)
         }
-        // 与 CovLivingViewModel：本地注册页完成的 faceId→PCM（须同时有人脸图 OSS 与 PCM OSS）
+        // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）
         for ((faceId, pcmUrl) in registryComplete) {
             if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
                 out.put(faceId, pcmUrl)

@@ -63,6 +63,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
     private var isRtmPayloadFloatExpanded = false
+    /** 记住 RTM 详情上次滚动位置，展开/刷新时优先恢复。 */
+    private var lastRtmPayloadScrollY = 0
 
     /** 人脸实时预览悬浮窗：与 RTM 同款，默认仅相机图标 */
     private var isFacePreviewFloatExpanded = false
@@ -144,6 +146,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private fun applyRtmPayloadFloatExpandedState() {
         mBinding?.apply {
             val expanded = isRtmPayloadFloatExpanded
+            if (!expanded) {
+                lastRtmPayloadScrollY = scrollRtmPayloadFloat.scrollY
+            }
             tvRtmPayloadFloatTitle.isVisible = expanded
             btnCopyRtmPayloadFloat.isVisible = expanded
             scrollRtmPayloadFloat.isVisible = expanded
@@ -162,7 +167,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             }
             if (expanded) {
                 scrollRtmPayloadFloat.post {
-                    scrollRtmPayloadFloat.scrollTo(0, 0)
+                    restoreRtmPayloadScroll()
                 }
             }
         }
@@ -385,6 +390,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             ivRtmPayloadFloatIcon.setOnClickListener {
                 toggleRtmPayloadFloatExpanded()
             }
+            scrollRtmPayloadFloat.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                if (isRtmPayloadFloatExpanded) {
+                    lastRtmPayloadScrollY = scrollY
+                }
+            }
             ivFacePreviewFloatIcon.setOnClickListener {
                 toggleFacePreviewFloatExpanded()
             }
@@ -476,9 +486,18 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             }
             if (isRtmPayloadFloatExpanded) {
                 scrollRtmPayloadFloat.post {
-                    scrollRtmPayloadFloat.scrollTo(0, 0)
+                    restoreRtmPayloadScroll()
                 }
             }
+        }
+    }
+
+    private fun restoreRtmPayloadScroll() {
+        mBinding?.scrollRtmPayloadFloat?.let { scrollView ->
+            val child = scrollView.getChildAt(0) ?: return@let
+            val maxScroll = (child.height - scrollView.height).coerceAtLeast(0)
+            val target = lastRtmPayloadScrollY.coerceIn(0, maxScroll)
+            scrollView.scrollTo(0, target)
         }
     }
 
