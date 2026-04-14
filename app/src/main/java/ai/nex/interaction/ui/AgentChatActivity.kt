@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
+import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import ai.nex.interaction.ui.common.BaseActivity
@@ -36,6 +37,8 @@ import ai.conv.internal.convoai.TranscriptType
 import ai.nex.interaction.databinding.ActivityAgentChatBinding
 import ai.nex.interaction.databinding.ItemTranscriptUserBinding
 import ai.nex.interaction.databinding.ItemTranscriptAgentBinding
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -59,6 +62,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     /** 人脸实时预览悬浮窗：与 RTM 同款，默认仅相机图标 */
     private var isFacePreviewFloatExpanded = false
+    private var ttsStreamTestJob: Job? = null
 
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
@@ -346,6 +350,14 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 BiometricRegisterActivity.start(this@AgentChatActivity)
             }
 
+            btnTestSingleTts.setOnClickListener {
+                playSingleSentenceTtsTest()
+            }
+
+            btnTestStreamTts.setOnClickListener {
+                playStreamTtsTest()
+            }
+
             btnCopyLog.setOnClickListener { copyDebugLogToClipboard() }
             tvLog.setOnLongClickListener {
                 copyDebugLogToClipboard()
@@ -379,6 +391,28 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             updateFacePreviewFloatVisibility()
             // collect 可能早于 initView 执行；旋转后 distinctUntilChanged 不再触发，须在此补绑相机
             refreshFaceRtmUplinkIfNeeded()
+        }
+    }
+
+    private fun playSingleSentenceTtsTest() {
+        ttsStreamTestJob?.cancel()
+        val ttsManager = TTSManager.getInstance()
+        ttsManager.stop()
+        ttsManager.speak(getString(R.string.tts_test_single_text))
+    }
+
+    private fun playStreamTtsTest() {
+        ttsStreamTestJob?.cancel()
+        val ttsManager = TTSManager.getInstance()
+        ttsManager.stop()
+        ttsStreamTestJob = lifecycleScope.launch {
+            ttsManager.speakStreamText(getString(R.string.tts_test_stream_part_1), "start")
+            delay(300)
+            ttsManager.speakStreamText(getString(R.string.tts_test_stream_part_2), "append")
+            delay(300)
+            ttsManager.speakStreamText(getString(R.string.tts_test_stream_part_3), "append")
+            delay(150)
+            ttsManager.speakStreamText("", "end")
         }
     }
 
@@ -738,6 +772,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     }
 
     override fun onDestroy() {
+        ttsStreamTestJob?.cancel()
+        TTSManager.getInstance().stop()
         FaceRtmStreamPublisher.debugPayloadListener = null
         stopVideoInput()
         cameraVideoInputManager.release()
