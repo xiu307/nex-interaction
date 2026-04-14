@@ -14,6 +14,7 @@ local.properties
 
 # Editor (个人/本机设置，不纳入版本库；团队若需共享可改为提交并从此处移除)
 .vscode/
+.claude/
 
 # Environment configuration (contains sensitive credentials)
 env.properties

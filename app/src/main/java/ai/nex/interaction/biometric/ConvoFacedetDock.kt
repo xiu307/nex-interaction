@@ -56,6 +56,22 @@ object ConvoFacedetDock {
     }
 
     /**
+     * 动态实时注册需要 CameraX 分析链路（DetectorPipeline.getAnalyzer），因此不能开启
+     * skipLiveMediaPipeFacePipeline（该模式只用于离线视频/图片注册）。
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun configForBiometricLiveEnrollment(context: Context): FaceDetectorConfig {
+        return FaceDetectorConfig().apply {
+            deviceId = "sdk_demo"
+            applyMainActivityDemoPipelineFields(this)
+            posePipelineEnabled = false
+            mediapipeForceCpuDelegate = true
+            skipLiveMediaPipeFacePipeline = false
+            enrollmentSimilarityThreshold = 0.78f
+        }
+    }
+
+    /**
      * @param deviceIdForReport 与 RTC 本端 UID / LLM `lables.userName` 一致（勿再用 [stableDeviceId]），便于与 RTM 顶层 clientId 对齐。
      */
     fun configForLiveSession(context: Context, deviceIdForReport: String): FaceDetectorConfig {
