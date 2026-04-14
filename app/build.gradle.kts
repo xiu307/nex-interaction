@@ -7,6 +7,10 @@ android {
     namespace = "ai.nex.interaction"
     compileSdk = 36
 
+    buildFeatures {
+        viewBinding = true
+    }
+
     defaultConfig {
         applicationId = "ai.nex.interaction"
         minSdk = 26
@@ -38,8 +42,14 @@ android {
 }
 
 dependencies {
+    implementation(project(":agroacore"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.lifecycle.viewmodel)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp.core)
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

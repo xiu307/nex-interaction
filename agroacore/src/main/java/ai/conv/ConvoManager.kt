@@ -29,6 +29,14 @@ data class ConvoManagerConfig(
     /** 音频场景 */
     val audioScenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT,
 
+    /**
+     * 是否主动加载 RTC AI 扩展 provider。
+     *
+     * 某些设备/ROM 上 `RtcEngineEx.loadExtensionProvider(...)` 可能直接触发 native crash，
+     * 因此默认关闭，仅在已验证目标环境稳定时再显式开启。
+     */
+    val loadRtcAiExtensions: Boolean = false,
+
     /** 音频输入中断回调 */
     val onAudioInputInterrupted: (() -> Unit)? = null
 )
@@ -153,7 +161,9 @@ class ConvoManager(
 
         return (RtcEngine.create(rtcConfig) as RtcEngineEx).apply {
             enableVideo()
-            loadConversationRtcAiExtensions()
+            if (config.loadRtcAiExtensions) {
+                loadConversationRtcAiExtensions()
+            }
         }
     }
 
