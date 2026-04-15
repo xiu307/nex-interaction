@@ -3,7 +3,6 @@ package ai.nex.interaction
 import ai.conv.internal.config.ConvoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -11,7 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object TokenGenerator {
-    private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
+    private const val JSON_MEDIA_TYPE = "application/json"
     private const val TOKEN_SERVICE_URL = "https://service.apprtc.cn/toolbox/v2/token/generate"
 
     private val httpClient = OkHttpClient()
@@ -33,7 +32,7 @@ object TokenGenerator {
                 val request = Request.Builder()
                     .url(TOKEN_SERVICE_URL)
                     .addHeader("Content-Type", JSON_MEDIA_TYPE)
-                    .post(requestBody.toString().toRequestBody(JSON_MEDIA_TYPE.toMediaType()))
+                    .post(requestBody.toString().toRequestBody())
                     .build()
 
                 httpClient.newCall(request).execute().use { response ->

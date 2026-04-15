@@ -225,6 +225,10 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
             addStatusLog("Audio input is only available after agent connected")
             return false
         }
+        if (agentSession.agentId == null) {
+            addStatusLog("Audio input is only available after agent started")
+            return false
+        }
         val started = startAudioInputInternal()
         if (!started) {
             addStatusLog("Enable audio input failed")
@@ -372,6 +376,10 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun checkJoinAndLoginComplete() {
         if (connection.rtcAndRtmReady) {
+            if (_uiState.value.connectionState != ConnectionState.Connected) {
+                _uiState.value = _uiState.value.copy(connectionState = ConnectionState.Connected)
+                addStatusLog("Rtc and Rtm are ready")
+            }
             startAgent()
         }
     }
