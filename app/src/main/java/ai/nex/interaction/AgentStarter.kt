@@ -4,7 +4,6 @@ import ai.conv.internal.config.ConvoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -13,8 +12,9 @@ import org.json.JSONObject
 object AgentStarter {
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
+    private const val LOG_TAG = "OkHttp/Agent"
 
-    private val httpClient = OkHttpClient()
+    private val httpClient = OkHttpDebugLogger.createClient(LOG_TAG)
 
     suspend fun startAgentAsync(
         channelName: String,
@@ -25,7 +25,7 @@ object AgentStarter {
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url("$API_BASE_URL/${ConvoConfig.APP_ID}/join/")
+                .url("$API_BASE_URL/${ConvoConfig.APP_ID}/join")
                 .addHeader("Content-Type", JSON_MEDIA_TYPE)
                 .addHeader("Authorization", "agora token=$authToken")
                 .post(

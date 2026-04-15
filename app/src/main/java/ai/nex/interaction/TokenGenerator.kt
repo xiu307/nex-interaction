@@ -3,7 +3,6 @@ package ai.nex.interaction
 import ai.conv.internal.config.ConvoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -12,8 +11,9 @@ import org.json.JSONObject
 object TokenGenerator {
     private const val JSON_MEDIA_TYPE = "application/json"
     private const val TOKEN_SERVICE_URL = "https://service.apprtc.cn/toolbox/v2/token/generate"
+    private const val LOG_TAG = "OkHttp/Token"
 
-    private val httpClient = OkHttpClient()
+    private val httpClient = OkHttpDebugLogger.createClient(LOG_TAG)
 
     suspend fun generateTokensAsync(channelName: String, uid: String): Result<String> =
         withContext(Dispatchers.IO) {
