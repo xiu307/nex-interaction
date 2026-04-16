@@ -1,9 +1,8 @@
-package ai.nex.interaction.api
+package ai.conv.api
 
 import android.util.Log
-import ai.nex.interaction.KeyCenter
-import ai.nex.interaction.biometric.BiometricSalRegistry
-import ai.nex.interaction.api.net.SecureOkHttpClient
+import ai.conv.api.net.SecureOkHttpClient
+import ai.conv.internal.config.ConvoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,47 +24,38 @@ object AgentStarter {
     private const val TAG = "AgentStarter"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
-    /** 实验室预置声纹（SAL sample_urls 键与 PCM URL） */
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val SAL_LAB_PCM_URL_SPEAKER1 = "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
     private const val SAL_LAB_PCM_URL_SPEAKER2 = "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
-    /** `turn_detection.config.start_of_speech.mode` */
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
-    /** `turn_detection.config.start_of_speech.disabled_config.strategy` */
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
+
     private val okHttpClient: OkHttpClient by lazy {
-        SecureOkHttpClient.create()
-            .build()
+        SecureOkHttpClient.create().build()
     }
-    /**
-     * Start an agent with inline ASR/LLM/TTS pipeline configuration.
-     *
-     * @param channelName Channel name for the agent
-     * @param agentRtcUid Agent RTC UID
-     * @param agentToken Token for the agent to join the RTC channel
-     * @param authToken Agora token for REST API authorization (requires APP_CERTIFICATE enabled)
-     * @param remoteRtcUid Current user RTC UID that the agent should subscribe to
-     * @return Result containing agentId or exception
-     */
+
     suspend fun startAgentAsync(
         channelName: String,
         agentRtcUid: String,
         agentToken: String,
         authToken: String,
-        remoteRtcUid: String
+        remoteRtcUid: String,
+        runtimeSalSampleUrls: Map<String, String> = emptyMap(),
+        hasIncompleteLocalRegistration: Boolean = false,
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUid=$remoteRtcUid")
-            val projectId = KeyCenter.APP_ID
-            val url = "$API_BASE_URL/$projectId/join"
+            val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/join"
 
             val requestBody = buildJsonPayload(
                 name = channelName,
                 channel = channelName,
                 agentRtcUid = agentRtcUid,
                 token = agentToken,
-                remoteRtcUids = listOf(remoteRtcUid)
+                remoteRtcUids = listOf(remoteRtcUid),
+                runtimeSalSampleUrls = runtimeSalSampleUrls,
+                hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
             )
 
             val request = Request.Builder()
@@ -103,16 +93,19 @@ object AgentStarter {
     fun buildStartAgentConfigPreview(
         channelName: String,
         agentRtcUid: String,
-        remoteRtcUid: String
+        remoteRtcUid: String,
+        runtimeSalSampleUrls: Map<String, String> = emptyMap(),
+        hasIncompleteLocalRegistration: Boolean = false,
     ): String {
-        val projectId = KeyCenter.APP_ID
-        val url = "$API_BASE_URL/$projectId/join"
+        val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/join"
         val body = buildJsonPayload(
             name = channelName,
             channel = channelName,
             agentRtcUid = agentRtcUid,
             token = "<agentToken>",
-            remoteRtcUids = listOf(remoteRtcUid)
+            remoteRtcUids = listOf(remoteRtcUid),
+            runtimeSalSampleUrls = runtimeSalSampleUrls,
+            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
         )
         return JSONObject().apply {
             put("url", url)
@@ -124,17 +117,14 @@ object AgentStarter {
         }.toString(2)
     }
 
-    /**
-     * Build JSON payload with inline ASR/LLM/TTS pipeline configuration.
-     * Aligns with open-source body shape (see CovLivingViewModel.getConvoaiOpenSourceBodyMap): ASR/LLM/TTS
-     * from [KeyCenter], no `avatar` block.
-     */
     private fun buildJsonPayload(
         name: String,
         channel: String,
         agentRtcUid: String,
         token: String,
-        remoteRtcUids: List<String>
+        remoteRtcUids: List<String>,
+        runtimeSalSampleUrls: Map<String, String>,
+        hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {
         return JSONObject().apply {
             val deviceId = remoteRtcUids.first().toLongOrNull() ?: 0L
@@ -155,17 +145,20 @@ object AgentStarter {
                 })
 
                 put("asr", buildAsrJson())
-
                 put("llm", buildLlmJson(deviceId))
-
                 put("tts", buildTtsJson())
 
                 put("sal", JSONObject().apply {
                     put("sal_mode", "locking")
-//                    put("sal_mode", "recognition")
-                    put("sample_urls",buildSalSampleUrlsJson(
-                        KeyCenter.SAL_ENABLE_PERSONALIZED,
-                        deviceId.toString()))
+                    put(
+                        "sample_urls",
+                        buildSalSampleUrlsJson(
+                            enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
+                            uidStr = deviceId.toString(),
+                            runtimeSalSampleUrls = runtimeSalSampleUrls,
+                            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+                        ),
+                    )
                 })
 
                 put("turn_detection", buildTurnDetectionJson())
@@ -174,57 +167,52 @@ object AgentStarter {
                     put("data_channel", "rtm")
                     put("enable_flexible", true)
                     put("enable_error_message", true)
-                    put("enable_dump",true)
-//                    put("bvc", JSONObject().apply {
-//                        put("params", JSONObject().apply {
-//                            put("chunk_size_frames",5)
-//                        })
-//                    })
+                    put("enable_dump", true)
                 })
             })
         }
     }
 
-    /**
-     * 与 [io.agora.scene.convoai.ui.living.CovLivingViewModel.buildSalSampleUrls] 同构：
-     * - 个性化声纹：开启且 URL 非空时追加 [uidStr] → PCM URL；
-     * - 预注册：env `SAL_BIOMETRIC_SAMPLE_URLS` JSON 对象，faceId → PCM URL（等价 BiometricSalRegistry）；
-     * - **仅当无任何预注册条目时**才追加两条实验室 PCM。
-     */
-    private fun buildSalSampleUrlsJson(enablePersonalized: Boolean, uidStr: String): JSONObject {
-        val rawBiometric = KeyCenter.SAL_BIOMETRIC_SAMPLE_URLS
+    private fun buildSalSampleUrlsJson(
+        enablePersonalized: Boolean,
+        uidStr: String,
+        runtimeSalSampleUrls: Map<String, String>,
+        hasIncompleteLocalRegistration: Boolean,
+    ): JSONObject {
+        val rawBiometric = ConvoConfig.SAL_BIOMETRIC_SAMPLE_URLS
         val biometricJson = try {
             if (rawBiometric.isNotEmpty()) JSONObject(rawBiometric) else JSONObject()
         } catch (_: Exception) {
             JSONObject()
         }
-        val registryComplete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
-        Log.i(TAG, "SAL: getCompleteSalFaceIdToPcmUrls size=${registryComplete.size} keys=${registryComplete.keys}")
-        if (registryComplete.isEmpty() && BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()) {
+        val runtimeUrls = runtimeSalSampleUrls
+            .filterKeys { it.isNotBlank() }
+            .filterValues { it.isNotBlank() }
+        Log.i(TAG, "SAL: runtime provider size=${runtimeUrls.size} keys=${runtimeUrls.keys}")
+        if (runtimeUrls.isEmpty() && hasIncompleteLocalRegistration) {
             Log.w(
                 TAG,
                 "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" +
                     "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。",
             )
         }
-        val hasBiometricEntries = biometricJson.keys().asSequence().any { k ->
-            k.isNotEmpty() && biometricJson.optString(k, "").isNotEmpty()
-        } || registryComplete.isNotEmpty()
+        val hasBiometricEntries = biometricJson.keys().asSequence().any { key ->
+            key.isNotEmpty() && biometricJson.optString(key, "").isNotEmpty()
+        } || runtimeUrls.isNotEmpty()
         val out = JSONObject()
         if (enablePersonalized) {
-            KeyCenter.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
+            ConvoConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
         }
         val keyIt = biometricJson.keys()
         while (keyIt.hasNext()) {
             val key = keyIt.next()
-            val v = biometricJson.optString(key, "")
-            if (key.isNotEmpty() && v.isNotEmpty()) out.put(key, v)
-        }
-        // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）
-        for ((faceId, pcmUrl) in registryComplete) {
-            if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
-                out.put(faceId, pcmUrl)
+            val value = biometricJson.optString(key, "")
+            if (key.isNotEmpty() && value.isNotEmpty()) {
+                out.put(key, value)
             }
+        }
+        runtimeUrls.forEach { (faceId, pcmUrl) ->
+            out.put(faceId, pcmUrl)
         }
         if (!hasBiometricEntries) {
             out.put(SAL_LAB_SPEAKER1_ID, SAL_LAB_PCM_URL_SPEAKER1)
@@ -234,9 +222,9 @@ object AgentStarter {
     }
 
     private fun buildAsrJson(): JSONObject = JSONObject().apply {
-        KeyCenter.ASR_LANG.takeIf { it.isNotEmpty() }?.let { put("language", it) }
-        KeyCenter.ASR_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        val raw = KeyCenter.ASR_PARAMS
+        ConvoConfig.ASR_LANG.takeIf { it.isNotEmpty() }?.let { put("language", it) }
+        ConvoConfig.ASR_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = ConvoConfig.ASR_PARAMS
         if (raw.isNotEmpty()) {
             try {
                 put("params", JSONObject(raw))
@@ -247,10 +235,10 @@ object AgentStarter {
     }
 
     private fun buildLlmJson(userNameForLabels: Long): JSONObject = JSONObject().apply {
-        KeyCenter.LLM_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        KeyCenter.LLM_URL.takeIf { it.isNotEmpty() }?.let { put("url", it) }
-        KeyCenter.LLM_API_KEY.takeIf { it.isNotEmpty() }?.let { put("api_key", it) }
-        val sysRaw = KeyCenter.LLM_SYSTEM_MESSAGES
+        ConvoConfig.LLM_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        ConvoConfig.LLM_URL.takeIf { it.isNotEmpty() }?.let { put("url", it) }
+        ConvoConfig.LLM_API_KEY.takeIf { it.isNotEmpty() }?.let { put("api_key", it) }
+        val sysRaw = ConvoConfig.LLM_SYSTEM_MESSAGES
         if (sysRaw.isNotEmpty()) {
             try {
                 put("system_messages", JSONArray(sysRaw))
@@ -261,32 +249,28 @@ object AgentStarter {
         put("greeting_message", JSONObject.NULL)
         put("params", buildLlmParamsJson(userNameForLabels))
         put("style", JSONObject.NULL)
-        KeyCenter.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
+        ConvoConfig.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
             ?: put("max_history", JSONObject.NULL)
         put("ignore_empty", JSONObject.NULL)
-        put("input_modalities", JSONArray().apply { put("text"); put("image") })
+        put("input_modalities", JSONArray().apply {
+            put("text")
+            put("image")
+        })
         put("output_modalities", JSONObject.NULL)
         put("failure_message", JSONObject.NULL)
         put("auto_merge", false)
     }
 
     private fun buildLlmParamsJson(userNameForLabels: Long): JSONObject = try {
-        val base =
-            if (KeyCenter.LLM_PARRAMS.isNotEmpty()) JSONObject(KeyCenter.LLM_PARRAMS) else JSONObject()
-        base.put(
-            "lables",
-            JSONObject().put("userName", userNameForLabels)
-        )
+        val base = if (ConvoConfig.LLM_PARRAMS.isNotEmpty()) JSONObject(ConvoConfig.LLM_PARRAMS) else JSONObject()
+        base.put("lables", JSONObject().put("userName", userNameForLabels))
     } catch (_: Exception) {
-        JSONObject().put(
-            "lables",
-            JSONObject().put("userName", userNameForLabels)
-        )
+        JSONObject().put("lables", JSONObject().put("userName", userNameForLabels))
     }
 
     private fun buildTtsJson(): JSONObject = JSONObject().apply {
-        KeyCenter.TTS_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        val raw = KeyCenter.TTS_PARAMS
+        ConvoConfig.TTS_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = ConvoConfig.TTS_PARAMS
         if (raw.isNotEmpty()) {
             try {
                 put("params", JSONObject(raw))
@@ -296,9 +280,6 @@ object AgentStarter {
         }
     }
 
-    /**
-     * 构建 `properties.turn_detection`：`config.start_of_speech` 为 disabled + ignore 策略（无 VAD 毫秒配置）。
-     */
     private fun buildTurnDetectionJson(): JSONObject = JSONObject().apply {
         put("config", JSONObject().apply {
             put("start_of_speech", JSONObject().apply {
@@ -310,25 +291,17 @@ object AgentStarter {
         })
     }
 
-    /**
-     * Stop an agent
-     *
-     * @param agentId Agent ID to stop
-     * @param authToken Agora token for REST API authorization (requires APP_CERTIFICATE enabled)
-     * @return Result containing success or exception
-     */
     suspend fun stopAgentAsync(
         agentId: String,
-        authToken: String
+        authToken: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val projectId = KeyCenter.APP_ID
-            val url = "$API_BASE_URL/$projectId/agents/$agentId/leave"
+            val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/agents/$agentId/leave"
 
             val request = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "agora token=$authToken")
-                .post("".toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .post("".toRequestBody(JSON_MEDIA_TYPE.toMediaType()))
                 .build()
 
             val response = okHttpClient.newCall(request).execute()

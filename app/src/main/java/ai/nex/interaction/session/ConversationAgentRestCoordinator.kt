@@ -1,7 +1,7 @@
 package ai.nex.interaction.session
 
-import ai.nex.interaction.api.AgentStarter
-import ai.nex.interaction.api.TokenGenerator
+import ai.conv.api.AgentStarter
+import ai.conv.api.TokenGenerator
 
 /**
  * 在 RTC/RTM 已就绪后，为当前频道拉取 Agent 用 Token 并调用 [AgentStarter] 启停云端 Agent。
@@ -22,6 +22,8 @@ object ConversationAgentRestCoordinator {
         channelName: String,
         agentRtcUid: String,
         remoteRtcUid: String,
+        runtimeSalSampleUrls: Map<String, String> = emptyMap(),
+        hasIncompleteLocalRegistration: Boolean = false,
     ): Result<AgentStartOutcome> {
         val tokenResult = TokenGenerator.generateTokensAsync(
             channelName = channelName,
@@ -34,6 +36,8 @@ object ConversationAgentRestCoordinator {
             agentToken = token,
             authToken = token,
             remoteRtcUid = remoteRtcUid,
+            runtimeSalSampleUrls = runtimeSalSampleUrls,
+            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
         )
         return startResult.map { agentId ->
             AgentStartOutcome(agentId = agentId, channelScopedToken = token)

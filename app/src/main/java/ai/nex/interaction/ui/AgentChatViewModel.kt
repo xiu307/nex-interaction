@@ -31,6 +31,7 @@ import ai.conv.internal.convoai.MessageReceipt
 import ai.conv.internal.convoai.Metric
 import ai.conv.internal.convoai.VoiceprintStateChangeEvent
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
+import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
@@ -358,6 +359,8 @@ class AgentChatViewModel : ViewModel() {
                 channelName = connection.channelName,
                 agentRtcUid = agentUid.toString(),
                 remoteRtcUid = userId.toString(),
+                runtimeSalSampleUrls = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls(),
+                hasIncompleteLocalRegistration = BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair(),
             )
             startResult.fold(
                 onSuccess = { outcome ->
