@@ -99,12 +99,14 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             if (rtmMessage.type == RtmConstants.RtmMessageType.BINARY) {
                 val bytes = rtmMessage.data as? ByteArray ?: return
                 val rawString = String(bytes, Charsets.UTF_8)
+                callMessagePrint(TAG, "<<< [onMessageEvent][raw] from=${event.publisherId ?: ""} payload=$rawString")
                 val messageMap = mMessageParser.parseJsonToMap(rawString)
                 messageMap?.let { map ->
                     dealMessageWithMap(event.publisherId ?: "", map)
                 }
             } else {
                 val rawString = rtmMessage.data as? String ?: return
+                callMessagePrint(TAG, "<<< [onMessageEvent][raw] from=${event.publisherId ?: ""} payload=$rawString")
                 val messageMap = mMessageParser.parseJsonToMap(rawString)
                 messageMap?.let { map ->
                     dealMessageWithMap(event.publisherId ?: "", map)

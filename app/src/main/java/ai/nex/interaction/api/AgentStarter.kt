@@ -82,7 +82,7 @@ object AgentStarter {
                 throw RuntimeException("Start agent error: httpCode=${response.code}, httpMsg=$errorBody")
             }
 
-            val body = response.body?.string()
+            val body = response.body?.string() ?: throw RuntimeException("Start agent response body is null")
             val bodyJson = JSONObject(body)
             val agentId = bodyJson.optString("agent_id", "")
 
@@ -94,6 +94,34 @@ object AgentStarter {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * 供通话页调试查看 startAgentAsync 的请求配置（URL / Headers / Body）。
+     * 敏感 token 使用占位符，避免误泄露。
+     */
+    fun buildStartAgentConfigPreview(
+        channelName: String,
+        agentRtcUid: String,
+        remoteRtcUid: String
+    ): String {
+        val projectId = KeyCenter.APP_ID
+        val url = "$API_BASE_URL/$projectId/join"
+        val body = buildJsonPayload(
+            name = channelName,
+            channel = channelName,
+            agentRtcUid = agentRtcUid,
+            token = "<agentToken>",
+            remoteRtcUids = listOf(remoteRtcUid)
+        )
+        return JSONObject().apply {
+            put("url", url)
+            put("headers", JSONObject().apply {
+                put("Content-Type", JSON_MEDIA_TYPE)
+                put("Authorization", "agora token=<authToken>")
+            })
+            put("body", body)
+        }.toString(2)
     }
 
     /**
@@ -132,14 +160,12 @@ object AgentStarter {
 
                 put("tts", buildTtsJson())
 
-                var hehe = buildSalSampleUrlsJson(
-                   KeyCenter.SAL_ENABLE_PERSONALIZED,
-                   deviceId.toString(),
-               )
                 put("sal", JSONObject().apply {
-//                    put("sal_mode", "locking")
-                    put("sal_mode", "recognition")
-                    put("sample_urls",hehe )
+                    put("sal_mode", "locking")
+//                    put("sal_mode", "recognition")
+                    put("sample_urls",buildSalSampleUrlsJson(
+                        KeyCenter.SAL_ENABLE_PERSONALIZED,
+                        deviceId.toString()))
                 })
 
                 put("turn_detection", buildTurnDetectionJson())
@@ -149,6 +175,11 @@ object AgentStarter {
                     put("enable_flexible", true)
                     put("enable_error_message", true)
                     put("enable_dump",true)
+//                    put("bvc", JSONObject().apply {
+//                        put("params", JSONObject().apply {
+//                            put("chunk_size_frames",5)
+//                        })
+//                    })
                 })
             })
         }

@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
+import ai.nex.interaction.api.AgentStarter
 import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
 import ai.nex.interaction.ui.widget.DebugOverlayView
@@ -362,6 +363,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             tvBiometricRegister.setOnClickListener {
                 BiometricRegisterActivity.start(this@AgentChatActivity)
             }
+            tvViewAgentConfig.setOnClickListener {
+                showStartAgentConfigDialog()
+            }
 
             btnTestSingleTts.setOnClickListener {
                 playSingleSentenceTtsTest()
@@ -512,6 +516,41 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private fun copyPlainTextToClipboard(label: String, clipLabel: String) {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText(clipLabel, label))
+    }
+
+    private fun showStartAgentConfigDialog() {
+        val uiState = viewModel.uiState.value
+        val channel = if (uiState.connectionState == AgentChatViewModel.ConnectionState.Connected) {
+            // 会话中展示当前 channel；未连接时用示例值展示结构
+            "current_connected_channel"
+        } else {
+            "channel_kotlin_xxxxxx"
+        }
+        val content = AgentStarter.buildStartAgentConfigPreview(
+            channelName = channel,
+            agentRtcUid = AgentChatViewModel.agentUid.toString(),
+            remoteRtcUid = AgentChatViewModel.userId.toString()
+        )
+        val textView = androidx.appcompat.widget.AppCompatTextView(this).apply {
+            text = content
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(24, 24, 24, 24)
+        }
+        val scrollView = ScrollView(this).apply {
+            addView(
+                textView,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.agent_chat_agent_config_title))
+            .setView(scrollView)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /** 复制上方调试日志（纯文本，含 agentId 等），便于粘贴到 IM / 工单。 */

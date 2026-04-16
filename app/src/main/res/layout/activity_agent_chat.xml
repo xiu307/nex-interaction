@@ -316,6 +316,23 @@
             android:textSize="14sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:id="@+id/tvViewAgentConfig"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="40dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:text="@string/agent_chat_view_agent_config"
+            android:textColor="@color/accent_blue"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
         <LinearLayout
             android:id="@+id/llTtsTests"
             android:layout_width="match_parent"

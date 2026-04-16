@@ -132,6 +132,8 @@
     <string name="agent_chat_face_rtm_preview_cd">与 RTM 同管线的相机预览（ROBOT_FACE_INFO_UP）</string>
     <string name="agent_chat_face_preview_icon_cd">人脸实时预览，点按展开或收起</string>
     <string name="agent_chat_face_preview_title_short">人脸预览（同 RTM 管线）</string>
+    <string name="agent_chat_view_agent_config">查看 Agent 配置</string>
+    <string name="agent_chat_agent_config_title">startAgentAsync 配置</string>
     <string name="tts_test_single">测试一句话 TTS</string>
     <string name="tts_test_stream">测试流式 TTS</string>
     <string name="tts_test_single_text">你好，这是一条本地 TTS 单句测试。</string>
