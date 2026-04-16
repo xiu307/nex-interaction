@@ -5,7 +5,8 @@ import ai.conv.internal.audio.CustomAudioInputManager
 import ai.conv.internal.convoai.ConversationalAIAPIConfig
 import ai.conv.internal.convoai.ConversationalAIAPIImpl
 import ai.conv.internal.convoai.IConversationalAIAPI
-import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
+import ai.conv.internal.convoai.IConversationalAIAPIEventListener
+import ai.conv.internal.rtc.ConversationRtcEventListener
 import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtm.ConversationRtmEventListener
 import ai.conv.internal.rtm.ConversationRtmEventSink
@@ -55,7 +56,7 @@ data class ConvoManagerConfig(
  * )
  * ```
  */
-class ConvoManager(
+class AgroaManager(
     context: Context,
     appId: String,
     userId: String,
@@ -63,7 +64,7 @@ class ConvoManager(
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
     rtcEventSink: ConversationRtcEventSink,
     rtmEventSink: ConversationRtmEventSink,
-    convoAiEventHandler: ai.conv.internal.convoai.IConversationalAIAPIEventHandler,
+    convoAiEventHandler: IConversationalAIAPIEventListener,
     logTag: String = "ConvoManager",
     channelNameProvider: () -> String
 ) {
@@ -82,17 +83,17 @@ class ConvoManager(
     val videoInputManager: ExternalVideoCaptureManager
     val rtmLoginState = RtmLoginState()
 
-    private val rtcEventHandler: ConversationRtcEngineEventHandler
-    private val rtmEventListener: ConversationRtmEventListener
-
-    init {
-        // 初始化 RTC（使用真正的 event sink）
-        rtcEventHandler = ConversationRtcEngineEventHandler(
+    // 初始化 RTC（使用真正的 event sink）
+    private val rtcEventHandler: ConversationRtcEventListener =
+        ConversationRtcEventListener(
             scope = scope,
             logTag = logTag,
             channelNameProvider = channelNameProvider,
             sink = rtcEventSink
         )
+    private val rtmEventListener: ConversationRtmEventListener
+
+    init {
         rtcEngine = initRtcEngine(context, appId, rtcEventHandler)
 
         // 初始化音视频管理器
@@ -141,7 +142,7 @@ class ConvoManager(
     private fun initRtcEngine(
         context: Context,
         appId: String,
-        eventHandler: ConversationRtcEngineEventHandler
+        eventHandler: ConversationRtcEventListener
     ): RtcEngineEx {
         val rtcConfig = RtcEngineConfig().apply {
             mContext = context

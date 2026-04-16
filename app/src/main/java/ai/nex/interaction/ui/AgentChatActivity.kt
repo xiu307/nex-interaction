@@ -25,13 +25,12 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import ai.conv.api.AgentStarter
+import ai.conv.api.AgentRepository
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
-import ai.nex.interaction.ui.widget.DebugOverlayView
 import ai.nex.interaction.ui.common.BaseActivity
 import ai.nex.interaction.video.CameraVideoInputManager
 import ai.conv.internal.convoai.AgentState
@@ -526,7 +525,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         } else {
             "channel_kotlin_xxxxxx"
         }
-        val content = AgentStarter.buildStartAgentConfigPreview(
+        val content = AgentRepository.buildStartAgentConfigPreview(
             channelName = channel,
             agentRtcUid = AgentChatViewModel.agentUid.toString(),
             remoteRtcUid = AgentChatViewModel.userId.toString(),

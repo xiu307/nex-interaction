@@ -1,7 +1,7 @@
 package ai.conv.api
 
 import ai.conv.api.net.SecureOkHttpClient
-import ai.conv.internal.config.ConvoConfig
+import ai.conv.internal.config.AgroaConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -95,8 +95,8 @@ object TokenGenerator {
         uid: String,
         tokenTypes: Array<AgoraTokenType>,
     ): JSONObject = JSONObject().apply {
-        put("appId", ConvoConfig.APP_ID)
-        put("appCertificate", ConvoConfig.APP_CERTIFICATE)
+        put("appId", AgroaConfig.APP_ID)
+        put("appCertificate", AgroaConfig.APP_CERTIFICATE)
         put("channelName", channelName)
         put("expire", if (expireSecond > 0) expireSecond else 60 * 60 * 24)
         put("src", "Android")

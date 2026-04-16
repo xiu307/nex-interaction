@@ -17,7 +17,7 @@ interface ConversationRtcEventSink {
     suspend fun onRtcEngineError(err: Int)
 }
 
-class ConversationRtcEngineEventHandler(
+class ConversationRtcEventListener(
     private val scope: CoroutineScope,
     private val logTag: String,
     private val channelNameProvider: () -> String,

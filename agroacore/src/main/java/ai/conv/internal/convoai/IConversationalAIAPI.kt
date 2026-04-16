@@ -589,7 +589,7 @@ sealed class ConversationalAIAPIError : Exception() {
  *
  * @note Some callbacks (such as onTranscriptUpdated) may be triggered at high frequency for reliability. If your business requires deduplication, please handle it at the business layer.
  */
-interface IConversationalAIAPIEventHandler {
+interface IConversationalAIAPIEventListener {
     /**
      * Called when the agent state changes (silent, listening, thinking, speaking).
      * @param agentUserId Agent user ID
@@ -673,13 +673,13 @@ interface IConversationalAIAPI {
      * Register an event handler to receive AI conversation events.
      * @param handler Event handler instance
      */
-    fun addHandler(handler: IConversationalAIAPIEventHandler)
+    fun addHandler(handler: IConversationalAIAPIEventListener)
 
     /**
      * Remove a registered event handler.
      * @param handler Event handler instance
      */
-    fun removeHandler(handler: IConversationalAIAPIEventHandler)
+    fun removeHandler(handler: IConversationalAIAPIEventListener)
 
     /**
      * Subscribe to a channel to receive AI conversation events.

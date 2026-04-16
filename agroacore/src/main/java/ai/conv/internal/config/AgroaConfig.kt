@@ -9,7 +9,7 @@ package ai.conv.internal.config
  * 生产环境不要把真实凭证硬编码在客户端，请改为由后端签发 Token 和下发
  * 必要配置。
  */
-object ConvoConfig {
+object AgroaConfig {
     const val APP_ID: String = "e9e7cafd870849b292c731d4bab44306"
     const val APP_CERTIFICATE: String = "58bccff9667c4d6f863b938a30c95d40"
 

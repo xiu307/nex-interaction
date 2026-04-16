@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.nex.interaction.AgentApp
 import ai.nex.interaction.KeyCenter
-import ai.conv.ConvoManager
+import ai.conv.AgroaManager
 import ai.conv.ConvoManagerConfig
 import ai.nex.interaction.video.ConversationExternalVideoPublishController
 import ai.conv.internal.convoai.AgentState
@@ -15,7 +15,6 @@ import ai.conv.internal.convoai.ModuleError
 import ai.conv.internal.convoai.StateChangeEvent
 import ai.conv.internal.convoai.Transcript
 import ai.conv.internal.convoai.TranscriptType
-import io.agora.rtc2.Constants
 import io.agora.rtc2.Constants.ERR_OK
 import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 import io.agora.rtc2.video.AgoraVideoFrame
@@ -24,7 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatActivity
-import ai.conv.internal.convoai.IConversationalAIAPIEventHandler
+import ai.conv.internal.convoai.IConversationalAIAPIEventListener
 import ai.conv.internal.convoai.InterruptEvent
 import ai.conv.internal.convoai.MessageError
 import ai.conv.internal.convoai.MessageReceipt
@@ -35,7 +34,6 @@ import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
-import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
 import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtc.joinConversationChannelWithOptions
 import ai.conv.internal.rtm.ConversationRtmEventSink
@@ -110,8 +108,8 @@ class AgentChatViewModel : ViewModel() {
     private val connection = ConnectionSessionState()
     private val agentSession = AgentSessionState()
 
-    private lateinit var manager: ConvoManager
-    private val managerOrNull: ConvoManager?
+    private lateinit var manager: AgroaManager
+    private val managerOrNull: AgroaManager?
         get() = if (::manager.isInitialized) manager else null
 
     private val externalVideoPublish by lazy {
@@ -193,7 +191,7 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventHandler {
+    private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventListener {
         override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
             _agentState.value = event.state
         }
@@ -233,7 +231,7 @@ class AgentChatViewModel : ViewModel() {
     init {
         Log.d(TAG, "Initializing ConvoManager...")
         try {
-            manager = ConvoManager(
+            manager = AgroaManager(
                 context = AgentApp.instance(),
                 appId = KeyCenter.APP_ID,
                 userId = userId.toString(),

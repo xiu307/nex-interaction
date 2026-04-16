@@ -43,7 +43,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
     private var transcriptController: TranscriptController
     private var channelName: String? = null
 
-    private val conversationalAIHandlerHelper = ObservableHelper<IConversationalAIAPIEventHandler>()
+    private val conversationalAIHandlerHelper = ObservableHelper<IConversationalAIAPIEventListener>()
 
     // Log tags for better debugging
     private companion object {
@@ -305,12 +305,12 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         config.rtcEngine.setParameters("{\"rtc.log_external_input\": true}")
     }
 
-    override fun addHandler(eventHandler: IConversationalAIAPIEventHandler) {
+    override fun addHandler(eventHandler: IConversationalAIAPIEventListener) {
         callMessagePrint(TAG, ">>> [addHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}")
         conversationalAIHandlerHelper.subscribeEvent(eventHandler)
     }
 
-    override fun removeHandler(eventHandler: IConversationalAIAPIEventHandler) {
+    override fun removeHandler(eventHandler: IConversationalAIAPIEventListener) {
         callMessagePrint(TAG, ">>> [removeHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}")
         conversationalAIHandlerHelper.unSubscribeEvent(eventHandler)
     }

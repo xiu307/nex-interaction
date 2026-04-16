@@ -2,7 +2,7 @@ package ai.conv.api
 
 import android.util.Log
 import ai.conv.api.net.SecureOkHttpClient
-import ai.conv.internal.config.ConvoConfig
+import ai.conv.internal.config.AgroaConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,7 +20,7 @@ import org.json.JSONObject
  * This auth mode requires APP_CERTIFICATE to be enabled in the ShengWang console.
  * Pipeline (ASR/LLM/TTS) is configured inline in the request body.
  */
-object AgentStarter {
+object AgentRepository {
     private const val TAG = "AgentStarter"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
@@ -46,7 +46,7 @@ object AgentStarter {
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUid=$remoteRtcUid")
-            val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/join"
+            val url = "$API_BASE_URL/${AgroaConfig.APP_ID}/join"
 
             val requestBody = buildJsonPayload(
                 name = channelName,
@@ -97,7 +97,7 @@ object AgentStarter {
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
     ): String {
-        val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/join"
+        val url = "$API_BASE_URL/${AgroaConfig.APP_ID}/join"
         val body = buildJsonPayload(
             name = channelName,
             channel = channelName,
@@ -153,7 +153,7 @@ object AgentStarter {
                     put(
                         "sample_urls",
                         buildSalSampleUrlsJson(
-                            enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
+                            enablePersonalized = AgroaConfig.SAL_ENABLE_PERSONALIZED,
                             uidStr = deviceId.toString(),
                             runtimeSalSampleUrls = runtimeSalSampleUrls,
                             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
@@ -179,7 +179,7 @@ object AgentStarter {
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {
-        val rawBiometric = ConvoConfig.SAL_BIOMETRIC_SAMPLE_URLS
+        val rawBiometric = AgroaConfig.SAL_BIOMETRIC_SAMPLE_URLS
         val biometricJson = try {
             if (rawBiometric.isNotEmpty()) JSONObject(rawBiometric) else JSONObject()
         } catch (_: Exception) {
@@ -201,7 +201,7 @@ object AgentStarter {
         } || runtimeUrls.isNotEmpty()
         val out = JSONObject()
         if (enablePersonalized) {
-            ConvoConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
+            AgroaConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
         }
         val keyIt = biometricJson.keys()
         while (keyIt.hasNext()) {
@@ -222,9 +222,9 @@ object AgentStarter {
     }
 
     private fun buildAsrJson(): JSONObject = JSONObject().apply {
-        ConvoConfig.ASR_LANG.takeIf { it.isNotEmpty() }?.let { put("language", it) }
-        ConvoConfig.ASR_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        val raw = ConvoConfig.ASR_PARAMS
+        AgroaConfig.ASR_LANG.takeIf { it.isNotEmpty() }?.let { put("language", it) }
+        AgroaConfig.ASR_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = AgroaConfig.ASR_PARAMS
         if (raw.isNotEmpty()) {
             try {
                 put("params", JSONObject(raw))
@@ -235,10 +235,10 @@ object AgentStarter {
     }
 
     private fun buildLlmJson(userNameForLabels: Long): JSONObject = JSONObject().apply {
-        ConvoConfig.LLM_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        ConvoConfig.LLM_URL.takeIf { it.isNotEmpty() }?.let { put("url", it) }
-        ConvoConfig.LLM_API_KEY.takeIf { it.isNotEmpty() }?.let { put("api_key", it) }
-        val sysRaw = ConvoConfig.LLM_SYSTEM_MESSAGES
+        AgroaConfig.LLM_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        AgroaConfig.LLM_URL.takeIf { it.isNotEmpty() }?.let { put("url", it) }
+        AgroaConfig.LLM_API_KEY.takeIf { it.isNotEmpty() }?.let { put("api_key", it) }
+        val sysRaw = AgroaConfig.LLM_SYSTEM_MESSAGES
         if (sysRaw.isNotEmpty()) {
             try {
                 put("system_messages", JSONArray(sysRaw))
@@ -249,7 +249,7 @@ object AgentStarter {
         put("greeting_message", JSONObject.NULL)
         put("params", buildLlmParamsJson(userNameForLabels))
         put("style", JSONObject.NULL)
-        ConvoConfig.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
+        AgroaConfig.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
             ?: put("max_history", JSONObject.NULL)
         put("ignore_empty", JSONObject.NULL)
         put("input_modalities", JSONArray().apply {
@@ -262,15 +262,15 @@ object AgentStarter {
     }
 
     private fun buildLlmParamsJson(userNameForLabels: Long): JSONObject = try {
-        val base = if (ConvoConfig.LLM_PARRAMS.isNotEmpty()) JSONObject(ConvoConfig.LLM_PARRAMS) else JSONObject()
+        val base = if (AgroaConfig.LLM_PARRAMS.isNotEmpty()) JSONObject(AgroaConfig.LLM_PARRAMS) else JSONObject()
         base.put("lables", JSONObject().put("userName", userNameForLabels))
     } catch (_: Exception) {
         JSONObject().put("lables", JSONObject().put("userName", userNameForLabels))
     }
 
     private fun buildTtsJson(): JSONObject = JSONObject().apply {
-        ConvoConfig.TTS_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
-        val raw = ConvoConfig.TTS_PARAMS
+        AgroaConfig.TTS_VENDOR.takeIf { it.isNotEmpty() }?.let { put("vendor", it) }
+        val raw = AgroaConfig.TTS_PARAMS
         if (raw.isNotEmpty()) {
             try {
                 put("params", JSONObject(raw))
@@ -296,7 +296,7 @@ object AgentStarter {
         authToken: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/agents/$agentId/leave"
+            val url = "$API_BASE_URL/${AgroaConfig.APP_ID}/agents/$agentId/leave"
 
             val request = Request.Builder()
                 .url(url)
