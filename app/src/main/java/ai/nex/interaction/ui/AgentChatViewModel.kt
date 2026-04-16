@@ -497,7 +497,7 @@ class AgentChatViewModel : ViewModel() {
                 num++
             }
         }
-        return 3;
+        return num
     }
 
     /**
