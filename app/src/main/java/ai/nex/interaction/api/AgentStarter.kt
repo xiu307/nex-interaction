@@ -53,10 +53,10 @@ object AgentStarter {
         agentRtcUid: String,
         agentToken: String,
         authToken: String,
-        remoteRtcUid: String
+        remoteRtcUids: List<String>
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUid=$remoteRtcUid")
+            Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUids=$remoteRtcUids")
             val projectId = KeyCenter.APP_ID
             val url = "$API_BASE_URL/$projectId/join"
 
@@ -65,7 +65,7 @@ object AgentStarter {
                 channel = channelName,
                 agentRtcUid = agentRtcUid,
                 token = agentToken,
-                remoteRtcUids = listOf(remoteRtcUid)
+                remoteRtcUids = remoteRtcUids
             )
 
             val request = Request.Builder()
@@ -103,7 +103,7 @@ object AgentStarter {
     fun buildStartAgentConfigPreview(
         channelName: String,
         agentRtcUid: String,
-        remoteRtcUid: String
+        remoteRtcUids: List<String>
     ): String {
         val projectId = KeyCenter.APP_ID
         val url = "$API_BASE_URL/$projectId/join"
@@ -112,7 +112,7 @@ object AgentStarter {
             channel = channelName,
             agentRtcUid = agentRtcUid,
             token = "<agentToken>",
-            remoteRtcUids = listOf(remoteRtcUid)
+            remoteRtcUids = remoteRtcUids
         )
         return JSONObject().apply {
             put("url", url)

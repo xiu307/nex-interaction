@@ -5,7 +5,7 @@ package ai.nex.interaction.session
  * 从 [ai.nex.interaction.ui.AgentChatViewModel] 抽出，便于与 Agent/REST 编排分层。
  */
 class ConnectionSessionState {
-    var unifiedToken: String? = null
+    var unifiedToken: MutableMap<String, String> = mutableMapOf()
 
     var channelName: String = ""
 

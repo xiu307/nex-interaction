@@ -526,10 +526,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         } else {
             "channel_kotlin_xxxxxx"
         }
+
+        val totalUserNum = viewModel.getRegisterSALNum()
         val content = AgentStarter.buildStartAgentConfigPreview(
             channelName = channel,
             agentRtcUid = AgentChatViewModel.agentUid.toString(),
-            remoteRtcUid = AgentChatViewModel.userId.toString()
+            remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum).map { it.toString() }
         )
         val textView = androidx.appcompat.widget.AppCompatTextView(this).apply {
             text = content

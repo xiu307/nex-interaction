@@ -21,7 +21,7 @@ object ConversationAgentRestCoordinator {
     suspend fun startRemoteAgent(
         channelName: String,
         agentRtcUid: String,
-        remoteRtcUid: String,
+        remoteRtcUids: List<String>
     ): Result<AgentStartOutcome> {
         val tokenResult = TokenGenerator.generateTokensAsync(
             channelName = channelName,
@@ -33,7 +33,7 @@ object ConversationAgentRestCoordinator {
             agentRtcUid = agentRtcUid,
             agentToken = token,
             authToken = token,
-            remoteRtcUid = remoteRtcUid,
+            remoteRtcUids = remoteRtcUids,
         )
         return startResult.map { agentId ->
             AgentStartOutcome(agentId = agentId, channelScopedToken = token)

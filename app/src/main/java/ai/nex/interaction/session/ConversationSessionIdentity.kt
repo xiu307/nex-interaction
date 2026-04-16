@@ -15,6 +15,7 @@ object ConversationSessionIdentity {
     private const val USER_PREFS_NAME = "agent_chat_prefs"
     private const val KEY_LOCAL_USER_ID = "local_user_id"
     private const val INVALID_UID = -1
+    private const val MAX_LOCAL_USER_NUM = 10
 
     val userId: Int = getOrCreateLocalUserId()
 
@@ -43,7 +44,7 @@ object ConversationSessionIdentity {
         var uid: Int
         do {
             uid = generateRandomUid()
-        } while (uid == excludeUid)
+        } while (uid in excludeUid..excludeUid + MAX_LOCAL_USER_NUM)
         return uid
     }
 

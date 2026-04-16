@@ -18,6 +18,8 @@ class CustomAudioInputManager(
 
     companion object {
         private const val INVALID_TRACK_ID = -1
+
+        var customAudioTrackEx: MutableMap<Int, Int> = mutableMapOf()
     }
 
     private val microphoneAudioCaptureManager = MicrophoneAudioCaptureManager(
@@ -63,6 +65,24 @@ class CustomAudioInputManager(
             config
         )
         return customAudioTrackId
+    }
+
+    fun ensureCustomAudioTrackEx(uid: Int): Int {
+        customAudioTrackEx[uid]?.let {
+            return it
+        }
+        val config = AudioTrackConfig().apply {
+            enableLocalPlayback = false
+            enableAudioProcessing = false
+        }
+        // Empirically, DIRECT avoids re-capturing agent playback much better than MIXABLE
+        // in this quickstart's full-duplex voice conversation path.
+        val trackId = rtcEngine.createCustomAudioTrack(
+            Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
+            config
+        )
+        customAudioTrackEx[uid] = trackId
+        return trackId
     }
 
     /**
@@ -154,6 +174,10 @@ class CustomAudioInputManager(
             rtcEngine.destroyCustomAudioTrack(customAudioTrackId)
             customAudioTrackId = INVALID_TRACK_ID
         }
+        customAudioTrackEx.values.forEach {
+            rtcEngine.destroyCustomAudioTrack(it)
+        }
+        customAudioTrackEx.clear()
     }
 
     /**

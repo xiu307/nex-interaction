@@ -37,8 +37,12 @@ import androidx.camera.view.PreviewView
 import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
 import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtc.joinConversationChannelWithOptions
+import ai.conv.internal.rtc.joinConversationChannelExWithOptions
 import ai.conv.internal.rtm.ConversationRtmEventSink
 import ai.conv.internal.rtm.ConversationRtmLogin
+import ai.nex.interaction.api.AgentStarter
+import ai.nex.interaction.api.TokenGenerator
+import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
 import ai.nex.interaction.session.ConversationUserTokenLoader
@@ -46,6 +50,10 @@ import ai.nex.interaction.session.ConnectionSessionState
 import ai.nex.interaction.session.ConversationSessionIdentity
 import ai.nex.interaction.tools.appendDebugStatusLine
 import ai.nex.interaction.transcript.upsertTranscript
+import org.json.JSONObject
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.iterator
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -187,7 +195,7 @@ class AgentChatViewModel : ViewModel() {
                     connectionState = ConnectionState.Error
                 )
                 addStatusLog("Rtm connected failed")
-                connection.unifiedToken = null
+                connection.unifiedToken.clear()
             }
         }
     }
@@ -318,6 +326,36 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
+    private fun joinRtcChannelEx(rtcToken: String, channelName: String, uid: Int): Boolean {
+        Log.d(TAG, "joinChannelEx channelName: $channelName, localUid: $uid")
+        val m = managerOrNull ?: run {
+            addStatusLog("ConvoManager is not initialized")
+            return false
+        }
+        val customAudioTrackId = m.audioInputManager.ensureCustomAudioTrackEx(uid)
+        if (customAudioTrackId < 0) {
+            addStatusLog("Create custom audio track failed ret: $customAudioTrackId")
+            return false
+        }
+        m.rtcEngine.muteRemoteAudioStream(uid, true)
+        m.rtcEngine.muteRemoteVideoStream(uid, true)
+        val ret = joinConversationChannelExWithOptions(
+            rtcEngine = m.rtcEngine,
+            rtcToken = rtcToken,
+            channelName = channelName,
+            uid = uid,
+            customAudioTrackId = customAudioTrackId,
+        )
+        Log.d(TAG, "Joining RTC channelEx: $channelName, uid: $uid")
+        if (ret == ERR_OK) {
+            Log.d(TAG, "Join RTC room ex success")
+            return true
+        } else {
+            Log.e(TAG, "Join RTC room ex failed, ret: $ret")
+            return false
+        }
+    }
+
     /**
      * Leave RTC channel
      */
@@ -353,11 +391,11 @@ class AgentChatViewModel : ViewModel() {
                 addStatusLog("Agent already started, agentId=${agentSession.agentId}")
                 return@launch
             }
-
+            val totalUserNum = getRegisterSALNum()
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
                 agentRtcUid = agentUid.toString(),
-                remoteRtcUid = userId.toString(),
+                remoteRtcUids = (userId until userId + totalUserNum).map { it.toString() }
             )
             startResult.fold(
                 onSuccess = { outcome ->
@@ -390,10 +428,10 @@ class AgentChatViewModel : ViewModel() {
      *
      * @return Token string on success, null on failure
      */
-    private suspend fun generateUserToken(): String? {
+    private suspend fun generateUserToken(userId: String): String? {
         return ConversationUserTokenLoader.fetchAndStoreUnifiedUserToken(
             connection = connection,
-            userId = userId.toString(),
+            userId = userId,
         ).fold(
             onSuccess = { token ->
                 addStatusLog("Generate user token successfully")
@@ -433,6 +471,35 @@ class AgentChatViewModel : ViewModel() {
         Log.e(TAG, "RTM login failed: ${exception.message}", exception)
     }
 
+    fun getRegisterSALNum(): Int {
+        var num = 1
+        val rawBiometric = KeyCenter.SAL_BIOMETRIC_SAMPLE_URLS
+        val biometricJson = try {
+            if (rawBiometric.isNotEmpty()) JSONObject(rawBiometric) else JSONObject()
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val registryComplete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
+        Log.i(TAG, "SAL: getCompleteSalFaceIdToPcmUrls size=${registryComplete.size} keys=${registryComplete.keys}")
+
+        if (KeyCenter.SAL_ENABLE_PERSONALIZED) {
+            KeyCenter.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { num++ }
+        }
+        val keyIt = biometricJson.keys()
+        while (keyIt.hasNext()) {
+            val key = keyIt.next()
+            val v = biometricJson.optString(key, "")
+            if (key.isNotEmpty() && v.isNotEmpty()) num++
+        }
+        // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）
+        for ((faceId, pcmUrl) in registryComplete) {
+            if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
+                num++
+            }
+        }
+        return 3;
+    }
+
     /**
      * Join RTC channel and login RTM
      * @param channelName Channel name to join
@@ -447,11 +514,18 @@ class AgentChatViewModel : ViewModel() {
             )
 
             // Get token if not available, otherwise use existing token
-            val token = connection.unifiedToken ?: generateUserToken() ?: return@launch
+            val token = connection.unifiedToken[userId.toString()] ?: generateUserToken(userId.toString()) ?: return@launch
 
             // Join RTC channel with the unified token
             if (!joinRtcChannel(token, channelName, userId)) {
                 return@launch
+            }
+
+            val totalUserNum = getRegisterSALNum()
+            for (i in 1 until totalUserNum) {
+                val exUid = userId + i
+                val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString()) ?: return@launch
+                joinRtcChannelEx(exToken, channelName, exUid)
             }
 
             // Login RTM with the same unified token

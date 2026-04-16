@@ -1,5 +1,9 @@
 package ai.conv.internal.convoai.subRender
 
+import ai.conv.internal.audio.CustomAudioInputManager
+import ai.conv.internal.audio.MicrophoneAudioCaptureManager
+import ai.conv.internal.audio.MicrophoneAudioCaptureManager.Companion.CHANNEL_COUNT
+import ai.conv.internal.audio.MicrophoneAudioCaptureManager.Companion.SAMPLE_RATE
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IAudioFrameObserver
 import io.agora.rtc2.IRtcEngineEventHandler
@@ -203,7 +207,18 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
                 renderTimeMs: Long,
                 avsync_type: Int
             ): Boolean {
-                return false
+                val trackEx = CustomAudioInputManager.customAudioTrackEx
+                trackEx.values.forEach {
+                    config.rtcEngine.pushExternalAudioFrame(
+                        buffer,
+                        renderTimeMs,
+                        samplesPerChannel,
+                        channels,
+                        Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
+                        it
+                    )
+                }
+                return true
             }
 
             override fun onPlaybackAudioFrame(
@@ -292,7 +307,9 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
                 return null
             }
         })
-        config.rtcEngine.setPlaybackAudioFrameBeforeMixingParameters(44100, 1)
+        config.rtcEngine.setPlaybackAudioFrameBeforeMixingParameters(48000, CHANNEL_COUNT)
+        val samplesPerCall = SAMPLE_RATE * CHANNEL_COUNT * 10 / 1000
+        config.rtcEngine.setRecordingAudioFrameParameters(SAMPLE_RATE, CHANNEL_COUNT, 0, samplesPerCall)
         callMessagePrint(
             TAG,
             "init this:0x${

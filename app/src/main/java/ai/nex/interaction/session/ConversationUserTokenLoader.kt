@@ -18,7 +18,7 @@ object ConversationUserTokenLoader {
             channelName = "",
             uid = userId,
         ).map { token ->
-            connection.unifiedToken = token
+            connection.unifiedToken[userId] = token
             token
         }
     }
