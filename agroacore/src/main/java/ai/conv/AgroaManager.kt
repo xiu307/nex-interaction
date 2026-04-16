@@ -14,6 +14,7 @@ import ai.conv.internal.rtm.RtmLoginState
 import ai.conv.internal.rtm.createConversationRtmConfig
 import ai.conv.internal.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
+import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
@@ -33,6 +34,23 @@ data class ConvoManagerConfig(
     /** 音频输入中断回调 */
     val onAudioInputInterrupted: (() -> Unit)? = null
 )
+
+/**
+ * RTC/RTM 连接层事件监听（对外 API）。
+ *
+ * 说明：
+ * - 这是对 `internal` 包里 RTC/RTM 事件的“更稳定、更 Android 风格”的封装。
+ * - 回调线程：RTC 回调会被转发到 `AgroaManager` 构造参数传入的 `scope`；RTM 回调由 SDK 线程触发（当前实现只做轻量状态通知）。
+ */
+interface AgroaConnectionListener {
+    fun onRtcJoinSuccess(channel: String?, uid: Int, elapsed: Int) {}
+    fun onRtcLeave() {}
+    fun onRtcUserJoined(uid: Int, elapsed: Int) {}
+    fun onRtcUserOffline(uid: Int, reason: Int) {}
+    fun onRtcError(code: Int) {}
+    fun onRtmConnected() {}
+    fun onRtmFailed() {}
+}
 
 /**
  * 对话管理器：封装 RTC/RTM/ConvoAI 的初始化、配置和生命周期管理。
@@ -62,11 +80,9 @@ class AgroaManager(
     userId: String,
     private val scope: CoroutineScope,
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
-    rtcEventSink: ConversationRtcEventSink,
-    rtmEventSink: ConversationRtmEventSink,
-    convoAiEventHandler: IConversationalAIAPIEventListener,
-    logTag: String = "ConvoManager",
-    channelNameProvider: () -> String
+    private val connectionListener: AgroaConnectionListener? = null,
+    private val convoAiEventHandler: IConversationalAIAPIEventListener? = null,
+    logTag: String = "AgroaManager",
 ) {
     private companion object {
         /** 与对话示例一致的 AI-QoS 扩展（回声消除 / 降噪）。 */
@@ -76,6 +92,9 @@ class AgroaManager(
         )
     }
 
+    @Volatile
+    private var currentChannelName: String = ""
+
     val rtcEngine: RtcEngineEx
     val rtmClient: RtmClient
     val conversationalAIAPI: IConversationalAIAPI
@@ -83,12 +102,46 @@ class AgroaManager(
     val videoInputManager: ExternalVideoCaptureManager
     val rtmLoginState = RtmLoginState()
 
+    private val rtcEventSink: ConversationRtcEventSink =
+        object : ConversationRtcEventSink {
+            override suspend fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
+                connectionListener?.onRtcJoinSuccess(channel, uid, elapsed)
+            }
+
+            override suspend fun onLeaveChannel(stats: RtcStats?) {
+                connectionListener?.onRtcLeave()
+            }
+
+            override suspend fun onUserJoined(uid: Int, elapsed: Int) {
+                connectionListener?.onRtcUserJoined(uid, elapsed)
+            }
+
+            override suspend fun onUserOffline(uid: Int, reason: Int) {
+                connectionListener?.onRtcUserOffline(uid, reason)
+            }
+
+            override suspend fun onRtcEngineError(err: Int) {
+                connectionListener?.onRtcError(err)
+            }
+        }
+
+    private val rtmEventSink: ConversationRtmEventSink =
+        object : ConversationRtmEventSink {
+            override fun onRtmLinkConnected() {
+                connectionListener?.onRtmConnected()
+            }
+
+            override fun onRtmLinkFailed() {
+                connectionListener?.onRtmFailed()
+            }
+        }
+
     // 初始化 RTC（使用真正的 event sink）
     private val rtcEventHandler: ConversationRtcEventListener =
         ConversationRtcEventListener(
             scope = scope,
             logTag = logTag,
-            channelNameProvider = channelNameProvider,
+            channelNameProvider = { currentChannelName },
             sink = rtcEventSink
         )
     private val rtmEventListener: ConversationRtmEventListener
@@ -117,9 +170,17 @@ class AgroaManager(
             )
         )
         conversationalAIAPI.loadAudioSettings(config.audioScenario)
-        conversationalAIAPI.addHandler(convoAiEventHandler)
+        convoAiEventHandler?.let { conversationalAIAPI.addHandler(it) }
     }
 
+    /**
+     * 在发起 `joinChannel` 之前调用，用于：
+     * - RTC token 将过期日志打印时输出正确的 channelName
+     * - 让外部代码更明确地管理“动态会话状态”，而不是在构造函数里传 lambda
+     */
+    fun setChannelName(channelName: String) {
+        currentChannelName = channelName
+    }
 
     /**
      * 释放所有资源
@@ -129,6 +190,7 @@ class AgroaManager(
         rtmClient.removeEventListener(rtmEventListener)
 
         // 释放 ConvoAI
+        convoAiEventHandler?.let { conversationalAIAPI.removeHandler(it) }
         conversationalAIAPI.destroy()
 
         // 释放音视频管理器

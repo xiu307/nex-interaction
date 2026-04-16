@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.nex.interaction.AgentApp
 import ai.nex.interaction.KeyCenter
+import ai.conv.AgroaConnectionListener
 import ai.conv.AgroaManager
 import ai.conv.ConvoManagerConfig
 import ai.nex.interaction.video.ConversationExternalVideoPublishController
@@ -16,7 +17,6 @@ import ai.conv.internal.convoai.StateChangeEvent
 import ai.conv.internal.convoai.Transcript
 import ai.conv.internal.convoai.TranscriptType
 import io.agora.rtc2.Constants.ERR_OK
-import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 import io.agora.rtc2.video.AgoraVideoFrame
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,9 +34,7 @@ import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
-import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtc.joinConversationChannelWithOptions
-import ai.conv.internal.rtm.ConversationRtmEventSink
 import ai.conv.internal.rtm.ConversationRtmLogin
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
@@ -124,8 +122,8 @@ class AgentChatViewModel : ViewModel() {
 
     private val robotFaceSpeakerBind = RobotFaceSpeakerBindCoordinator()
 
-    private val rtcEventSink = object : ConversationRtcEventSink {
-        override suspend fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
+    private val connectionListener = object : AgroaConnectionListener {
+        override fun onRtcJoinSuccess(channel: String?, uid: Int, elapsed: Int) {
             connection.rtcJoined = true
             managerOrNull?.audioInputManager?.setPublished(true)
             externalVideoPublish.onRtcJoinChannelSuccess()
@@ -134,13 +132,13 @@ class AgentChatViewModel : ViewModel() {
             checkJoinAndLoginComplete()
         }
 
-        override suspend fun onLeaveChannel(stats: RtcStats?) {
+        override fun onRtcLeave() {
             stopExternalAudioCapture()
             externalVideoPublish.resetVideoPipelineOnLeaveOrError()
             addStatusLog("Rtc onLeaveChannel")
         }
 
-        override suspend fun onUserJoined(uid: Int, elapsed: Int) {
+        override fun onRtcUserJoined(uid: Int, elapsed: Int) {
             addStatusLog("Rtc onUserJoined, uid:$uid")
             if (uid == agentUid) {
                 Log.d(TAG, "Agent joined the channel, uid: $uid")
@@ -149,7 +147,7 @@ class AgentChatViewModel : ViewModel() {
             }
         }
 
-        override suspend fun onUserOffline(uid: Int, reason: Int) {
+        override fun onRtcUserOffline(uid: Int, reason: Int) {
             addStatusLog("Rtc onUserOffline, uid:$uid")
             if (uid == agentUid) {
                 Log.d(TAG, "Agent left the channel, uid: $uid, reason: $reason")
@@ -158,26 +156,23 @@ class AgentChatViewModel : ViewModel() {
             }
         }
 
-        override suspend fun onRtcEngineError(err: Int) {
+        override fun onRtcError(code: Int) {
             stopExternalAudioCapture()
             externalVideoPublish.resetVideoPipelineOnLeaveOrError()
             _uiState.value = _uiState.value.copy(
                 connectionState = ConnectionState.Error
             )
-            addStatusLog("Rtc onError: $err")
-            Log.e(TAG, "RTC error: $err")
+            addStatusLog("Rtc onError: $code")
+            Log.e(TAG, "RTC error: $code")
         }
-    }
-
-    // RTM event listener
-    private val rtmEventSink = object : ConversationRtmEventSink {
-        override fun onRtmLinkConnected() {
+ 
+        override fun onRtmConnected() {
             Log.d(TAG, "Rtm connected successfully")
             managerOrNull?.rtmLoginState?.isRtmLogin = true
             addStatusLog("Rtm connected successfully")
         }
 
-        override fun onRtmLinkFailed() {
+        override fun onRtmFailed() {
             Log.d(TAG, "RTM connection failed, need to re-login")
             managerOrNull?.rtmLoginState?.isRtmLogin = false
             managerOrNull?.rtmLoginState?.isLoggingIn = false
@@ -243,11 +238,9 @@ class AgentChatViewModel : ViewModel() {
                         addStatusLog("Audio input stopped unexpectedly")
                     }
                 ),
-                rtcEventSink = rtcEventSink,
-                rtmEventSink = rtmEventSink,
+                connectionListener = connectionListener,
                 convoAiEventHandler = conversationalAIAPIEventHandler,
                 logTag = TAG,
-                channelNameProvider = { connection.channelName }
             )
             Log.d(TAG, "ConvoManager initialized successfully")
         } catch (e: Exception) {
@@ -442,6 +435,7 @@ class AgentChatViewModel : ViewModel() {
     fun joinChannelAndLogin(channelName: String) {
         viewModelScope.launch {
             connection.beginJoinAttempt(channelName)
+            managerOrNull?.setChannelName(channelName)
 
             _uiState.value = _uiState.value.copy(
                 connectionState = ConnectionState.Connecting
