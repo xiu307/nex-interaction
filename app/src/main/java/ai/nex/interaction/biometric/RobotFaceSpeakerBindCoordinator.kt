@@ -54,14 +54,15 @@ class RobotFaceSpeakerBindCoordinator {
         var sent = false
         for (sc in vpidsInfo.vpidsConfidence) {
             if (sc.confidence <= 0.5) continue
-            if (!localFaceIds.contains(sc.speaker)) continue
-            val dedupeKey = "${transcript.turnId}_${sc.speaker}"
+            val userId = BiometricSalRegistry.resolveUserIdByFaceId(sc.speaker) ?: sc.speaker
+            if (!localFaceIds.contains(userId)) continue
+            val dedupeKey = "${transcript.turnId}_$userId"
             if (!sentKeys.add(dedupeKey)) continue
             val json = RobotFaceRtmProtocol.buildSpeakerBindJson(
                 clientId = clientId,
                 recordId = recordId,
-                faceId = sc.speaker,
-                speakerId = sc.speaker,
+                faceId = userId,
+                speakerId = userId,
             )
             sent = true
             Log.d(
@@ -78,7 +79,7 @@ class RobotFaceSpeakerBindCoordinator {
                 } else {
                     Log.d(
                         ConversationRtmPeers.LOG_TAG_SPEAKER_BIND,
-                        "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=${sc.speaker}",
+                        "ROBOT_FACE_SPEAKER_BIND ok turn=${transcript.turnId} speaker=$userId",
                     )
                 }
             }

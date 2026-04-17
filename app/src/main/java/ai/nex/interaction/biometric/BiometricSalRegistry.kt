@@ -1,10 +1,12 @@
 package ai.nex.interaction.biometric
 
 import android.content.Context
+import android.provider.Settings
 import ai.nex.interaction.AgentApp
 import ai.nex.interaction.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.security.MessageDigest
 
 /**
  * 用户点击「保存到本地」时固化的注册快照（与 Android `BiometricSalRegistry` 字段/键名一致，便于迁移）。
@@ -39,12 +41,47 @@ object BiometricSalRegistry {
     private const val KEY_FACE_IMAGE_MAP = "biometric_sal_face_id_face_image_map"
     private const val KEY_REGISTRATION_SNAPSHOT = "biometric_registration_snapshot_v1"
     private const val KEY_REGISTRATION_SNAPSHOT_MAP = "biometric_registration_snapshot_map_v1"
+    private const val KEY_FACE_ID_USER_ID_MAP = "biometric_face_id_user_id_map_v1"
+    private const val KEY_LAST_REGISTERED_USER_ID = "biometric_last_face_id"
 
     private const val KEY_ROBOT_FACE_RTM = "robot_face_rtm_uplink_enabled"
 
     private val gson = Gson()
 
     private fun prefs() = AgentApp.instance().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * faceId -> userId 绑定。业务主键统一使用 userId，faceId 仅用于底层识别临时映射。
+     */
+    fun bindFaceIdToUserId(faceId: String, userId: String) {
+        if (faceId.isEmpty() || userId.isEmpty()) return
+        val map = loadFaceIdToUserIdMap().toMutableMap()
+        map[faceId] = userId
+        prefs().edit().putString(KEY_FACE_ID_USER_ID_MAP, gson.toJson(map)).apply()
+    }
+
+    fun resolveUserIdByFaceId(faceId: String): String? =
+        loadFaceIdToUserIdMap()[faceId]?.takeIf { it.isNotEmpty() }
+
+    fun getOrCreateUserIdForFaceId(faceId: String): String {
+        resolveUserIdByFaceId(faceId)?.let { return it }
+        val used = loadFaceIdToUserIdMap().values.toMutableSet().apply { addAll(loadMap().keys) }
+        val deviceId = Settings.Secure.getString(
+            AgentApp.instance().contentResolver,
+            Settings.Secure.ANDROID_ID,
+        ).orEmpty()
+        val seed = if (deviceId.isNotEmpty()) "$deviceId#$faceId" else faceId
+        var attempt = 0
+        var uid: String
+        do {
+            uid = generateDeterministicSixDigitId(seed, attempt)
+            attempt++
+        } while (used.contains(uid))
+        bindFaceIdToUserId(faceId, uid)
+        return uid
+    }
+
+    fun getRegisteredUserIds(): List<String> = getAllStoredPersonRows().map { it.faceId }
 
     fun saveRegistrationSnapshot(snapshot: BiometricRegistrationSnapshot): String {
         val json = gson.toJson(snapshot)
@@ -232,23 +269,34 @@ object BiometricSalRegistry {
         val faceMap = loadFaceImageMap().toMutableMap()
         val pcmMap = loadMap().toMutableMap()
         val snapshotMap = loadRegistrationSnapshotMap().toMutableMap()
+        val faceToUser = loadFaceIdToUserIdMap().toMutableMap()
         faceMap.remove(faceId)
         pcmMap.remove(faceId)
         snapshotMap.remove(faceId)
+        val boundFaceIds = faceToUser.filterValues { it == faceId }.keys
+        boundFaceIds.forEach { faceToUser.remove(it) }
         val e = prefs().edit()
         e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(faceMap))
         e.putString(KEY_MAP, gson.toJson(pcmMap))
         e.putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(snapshotMap))
+        e.putString(KEY_FACE_ID_USER_ID_MAP, gson.toJson(faceToUser))
         val legacySnap = getLegacyRegistrationSnapshot()
         if (legacySnap?.faceId == faceId) {
             e.remove(KEY_REGISTRATION_SNAPSHOT)
         }
         if (getLastRegisteredFaceId() == faceId) {
             val remaining = faceMap.keys.union(pcmMap.keys).filter { it.isNotEmpty() }.sorted().firstOrNull()
-            e.putString("biometric_last_face_id", remaining ?: "")
+            e.putString(KEY_LAST_REGISTERED_USER_ID, remaining ?: "")
         }
         e.commit()
-        ConvoFacedetDock.clearFacePipelineState(AgentApp.instance(), faceId)
+        // 删除业务 userId 时，回收其对应底层 faceId 的 embedding/跟踪状态。
+        if (boundFaceIds.isEmpty()) {
+            ConvoFacedetDock.clearFacePipelineState(AgentApp.instance(), faceId)
+        } else {
+            boundFaceIds.forEach { rawFaceId ->
+                ConvoFacedetDock.clearFacePipelineState(AgentApp.instance(), rawFaceId)
+            }
+        }
     }
 
     /**
@@ -260,7 +308,8 @@ object BiometricSalRegistry {
         e.remove(KEY_FACE_IMAGE_MAP)
         e.remove(KEY_REGISTRATION_SNAPSHOT)
         e.remove(KEY_REGISTRATION_SNAPSHOT_MAP)
-        e.remove("biometric_last_face_id")
+        e.remove(KEY_FACE_ID_USER_ID_MAP)
+        e.remove(KEY_LAST_REGISTERED_USER_ID)
         for (k in prefs().all.keys.toList()) {
             if (k.startsWith("biometric_local_face_image_") || k.startsWith("biometric_local_pcm_")) {
                 e.remove(k)
@@ -271,11 +320,11 @@ object BiometricSalRegistry {
     }
 
     fun setLastRegisteredFaceId(id: String?) {
-        prefs().edit().putString("biometric_last_face_id", id ?: "").apply()
+        prefs().edit().putString(KEY_LAST_REGISTERED_USER_ID, id ?: "").apply()
     }
 
     fun getLastRegisteredFaceId(): String? =
-        prefs().getString("biometric_last_face_id", "")?.takeIf { it.isNotEmpty() }
+        prefs().getString(KEY_LAST_REGISTERED_USER_ID, "")?.takeIf { it.isNotEmpty() }
 
     fun setRobotFaceRtmEnabled(enabled: Boolean) {
         prefs().edit().putBoolean(KEY_ROBOT_FACE_RTM, enabled).apply()
@@ -302,6 +351,34 @@ object BiometricSalRegistry {
             gson.fromJson(json, BiometricRegistrationSnapshot::class.java)
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * 基于 seed 生成稳定的 6 位数字 ID（100000..999999），attempt 用于冲突探测。
+     */
+    private fun generateDeterministicSixDigitId(seed: String, attempt: Int): String {
+        val input = "$seed#$attempt"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+        val value = (
+            ((digest[0].toInt() and 0xFF) shl 24) or
+                ((digest[1].toInt() and 0xFF) shl 16) or
+                ((digest[2].toInt() and 0xFF) shl 8) or
+                (digest[3].toInt() and 0xFF)
+            ).toLong() and 0xFFFFFFFFL
+        val sixDigit = 100000 + (value % 900000).toInt()
+        return sixDigit.toString()
+    }
+
+    private fun loadFaceIdToUserIdMap(): Map<String, String> {
+        val json = prefs().getString(KEY_FACE_ID_USER_ID_MAP, "") ?: ""
+        if (json.isEmpty()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, String>>() {}.type
+            gson.fromJson<Map<String, String>>(json, type) ?: emptyMap()
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 }

@@ -392,20 +392,21 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
                             override fun onEnrollmentSuccess(faceId: String, isNewUser: Boolean, quality: Float) {
                                 if (isFinishing || isDestroyed) return
+                                val userId = BiometricSalRegistry.getOrCreateUserIdForFaceId(faceId)
                                 liveEnrollRunning = false
                                 enrollInProgress = false
                                 runCatching { fd.unbindCamera() }
                                 mBinding?.previewLive?.visibility = View.GONE
                                 mBinding?.previewFace?.visibility = View.VISIBLE
-                                mBinding?.etFaceId?.setText(faceId)
-                                BiometricSalRegistry.setLastRegisteredFaceId(faceId)
+                                mBinding?.etFaceId?.setText(userId)
+                                BiometricSalRegistry.setLastRegisteredFaceId(userId)
                                 // 动态注册仅拿 embedding：先写 local 占位，解锁后续声纹步骤；需要 OSS 可再走相册视频入口。
                                 BiometricSalRegistry.saveFaceIdToFaceImageUrl(
-                                    faceId,
+                                    userId,
                                     BiometricSalRegistry.FACE_IMAGE_URL_LOCAL_ONLY,
                                 )
                                 mBinding?.tvFaceIdStatus?.text =
-                                    getString(R.string.biometric_live_enroll_success, faceId, quality)
+                                    getString(R.string.biometric_live_enroll_success, userId, quality)
                                 Toast.makeText(
                                     this@BiometricRegisterActivity,
                                     R.string.biometric_live_enroll_success_toast,
@@ -670,19 +671,20 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             object : PhotoFaceEnrollment.ResultCallback {
                 override fun onSuccess(faceId: String, isNewUser: Boolean, quality: Float) {
                     if (isFinishing || isDestroyed) return
+                    val userId = BiometricSalRegistry.getOrCreateUserIdForFaceId(faceId)
                     Log.d(TAG, "VideoFaceEnrollment ok faceId=$faceId new=$isNewUser q=$quality")
                     val rawPreview = VideoFaceEnrollment.extractPreviewFrame(this@BiometricRegisterActivity, uri)
                     val uploadCopy = rawPreview?.copy(Bitmap.Config.ARGB_8888, false)
                     rawPreview?.recycle()
                     enrollInProgress = false
                     refreshFaceButtonsEnabled()
-                    mBinding?.etFaceId?.setText(faceId)
+                    mBinding?.etFaceId?.setText(userId)
                     mBinding?.tvFaceIdStatus?.text = getString(
                         R.string.biometric_faceid_enrolled_uploading,
-                        faceId,
+                        userId,
                         quality,
                     )
-                    BiometricSalRegistry.setLastRegisteredFaceId(faceId)
+                    BiometricSalRegistry.setLastRegisteredFaceId(userId)
                     refreshStepGates()
                     if (uploadCopy == null) {
                         Toast.makeText(
@@ -694,7 +696,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                     }
                     val displayCopy = uploadCopy.copy(Bitmap.Config.ARGB_8888, false)
                     mBinding?.previewFace?.setImageBitmap(displayCopy)
-                    uploadFaceBitmapForFaceId(faceId, uploadCopy)
+                    uploadFaceBitmapForFaceId(userId, uploadCopy)
                 }
 
                 override fun onError(message: String) {

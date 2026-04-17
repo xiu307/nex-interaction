@@ -5,6 +5,7 @@ import android.os.Looper
 import android.util.Log
 import ai.nex.interaction.session.ConversationRtmPeers
 import io.agora.rtm.RtmClient
+import org.json.JSONObject
 
 /**
  * **上传线**：按周期从 [RobotFaceSnapshotSource] 拷贝 [RobotFaceDetectionSnapshot]，经 [RobotFaceRtmProtocol] 发 RTM。
@@ -68,7 +69,7 @@ class RobotFaceInfoRtmSender(
         val snap = source.copySnapshot()
         uploadSeq += 1
         val wallMs = System.currentTimeMillis()
-        val json = RobotFaceRtmProtocol.buildRobotFaceInfoUpFromFacedet(
+        val rawJson = RobotFaceRtmProtocol.buildRobotFaceInfoUpFromFacedet(
             clientId = clientIdStr,
             recordId = recordIdStr,
             faceResults = snap.faces,
@@ -77,6 +78,7 @@ class RobotFaceInfoRtmSender(
             uploadSeq = uploadSeq,
             clientFlushWallMs = wallMs,
         )
+        val json = rewriteFaceIdsToUserIds(rawJson)
         Log.d(
             TAG,
             "ROBOT_FACE_INFO_UP seq=$uploadSeq wallMs=$wallMs bodyTsNs=${snap.bodyFrameTimestampNs} " +
@@ -95,5 +97,21 @@ class RobotFaceInfoRtmSender(
     companion object {
         private const val TAG = "RobotFaceRtmSender"
         private const val INTERVAL_MS = 100L
+    }
+
+    private fun rewriteFaceIdsToUserIds(rawJson: String): String {
+        return runCatching {
+            val root = JSONObject(rawJson)
+            val payload = root.optJSONObject("payload") ?: return rawJson
+            val faces = payload.optJSONArray("faces") ?: return rawJson
+            for (i in 0 until faces.length()) {
+                val item = faces.optJSONObject(i) ?: continue
+                val rawFaceId = item.opt("faceId")?.toString().orEmpty()
+                if (rawFaceId.isEmpty()) continue
+                val userId = BiometricSalRegistry.resolveUserIdByFaceId(rawFaceId) ?: continue
+                item.put("faceId", userId)
+            }
+            root.toString()
+        }.getOrElse { rawJson }
     }
 }

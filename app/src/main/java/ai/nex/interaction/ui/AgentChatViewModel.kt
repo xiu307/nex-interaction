@@ -408,7 +408,8 @@ class AgentChatViewModel : ViewModel() {
                 addStatusLog("Agent already started, agentId=${agentSession.agentId}")
                 return@launch
             }
-            val totalUserNum = getRegisterSALNum()
+            val sessionUserIds = buildRtcSessionUserIdList()
+            val totalUserNum = sessionUserIds.size
             currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, totalUserNum)
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
@@ -549,12 +550,11 @@ class AgentChatViewModel : ViewModel() {
                 return@launch
             }
 
-            val totalUserNum = getRegisterSALNum()
-            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, totalUserNum)
+            val sessionUserIds = buildRtcSessionUserIdList()
+            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, sessionUserIds.size)
             joinedExUids.clear()
             val successfulRemoteUids = mutableListOf(userId.toString())
-            for (i in 1 until totalUserNum) {
-                val exUid = userId + i
+            for (exUid in sessionUserIds.drop(1)) {
                 val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString())
                 if (exToken == null) {
                     rollbackAfterRtcJoinPhaseFailed("Generate ex uid token failed, uid=$exUid")
@@ -581,6 +581,19 @@ class AgentChatViewModel : ViewModel() {
             }
 
         }
+    }
+
+    /**
+     * RTC / remote_rtc_uids / labels.userName 统一 userId 体系：
+     * - 必含当前登录 userId；
+     * - 追加本地注册得到的 userId（可转为 Int 且不重复）。
+     */
+    private fun buildRtcSessionUserIdList(): List<Int> {
+        val out = linkedSetOf(userId)
+        BiometricSalRegistry.getRegisteredUserIds()
+            .mapNotNull { it.toIntOrNull() }
+            .forEach { out.add(it) }
+        return out.toList()
     }
 
     /**
