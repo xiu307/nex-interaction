@@ -1,61 +1,49 @@
 package ai.conv.core.rtc
 
-import android.util.Log
 import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 /**
- * 将 RTC 引擎事件从 SDK 线程转发到 [scope]（通常为 ViewModelScope），业务由 [sink] 实现。
+ * RTC 引擎事件回调透传到业务 [sink]。
+ *
+ * 线程说明：此处不做线程切换，回调线程由 RTC SDK 决定；
+ * 业务如需切主线程/协程，请在业务层自行处理。
  */
 interface ConversationRtcEventSink {
-    suspend fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int)
-    suspend fun onLeaveChannel(stats: RtcStats?)
-    suspend fun onUserJoined(uid: Int, elapsed: Int)
-    suspend fun onUserOffline(uid: Int, reason: Int)
-    suspend fun onRtcEngineError(err: Int)
+    fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int)
+    fun onLeaveChannel(stats: RtcStats?)
+    fun onUserJoined(uid: Int, elapsed: Int)
+    fun onUserOffline(uid: Int, reason: Int)
+    fun onRtcEngineError(err: Int)
+    fun onRtcTokenWillExpire(token: String?) {}
 }
 
 class ConversationRtcEventListener(
-    private val scope: CoroutineScope,
-    private val logTag: String,
-    private val channelNameProvider: () -> String,
     private val sink: ConversationRtcEventSink,
 ) : IRtcEngineEventHandler() {
 
     override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
-        scope.launch {
-            sink.onJoinChannelSuccess(channel, uid, elapsed)
-        }
+        sink.onJoinChannelSuccess(channel, uid, elapsed)
     }
 
     override fun onLeaveChannel(stats: RtcStats?) {
         super.onLeaveChannel(stats)
-        scope.launch {
-            sink.onLeaveChannel(stats)
-        }
+        sink.onLeaveChannel(stats)
     }
 
     override fun onUserJoined(uid: Int, elapsed: Int) {
-        scope.launch {
-            sink.onUserJoined(uid, elapsed)
-        }
+        sink.onUserJoined(uid, elapsed)
     }
 
     override fun onUserOffline(uid: Int, reason: Int) {
-        scope.launch {
-            sink.onUserOffline(uid, reason)
-        }
+        sink.onUserOffline(uid, reason)
     }
 
     override fun onError(err: Int) {
-        scope.launch {
-            sink.onRtcEngineError(err)
-        }
+        sink.onRtcEngineError(err)
     }
 
     override fun onTokenPrivilegeWillExpire(token: String?) {
-        Log.d(logTag, "RTC onTokenPrivilegeWillExpire ${channelNameProvider()}")
+        sink.onRtcTokenWillExpire(token)
     }
 }

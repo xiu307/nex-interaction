@@ -10,15 +10,17 @@ import io.agora.rtm.RtmEventListener
  * 将 RTM 链路事件交给 [sink]，与原先 [ai.nex.interaction.ui.AgentChatViewModel] 内联 listener 行为一致。
  */
 class ConversationRtmEventListener(
-    private val logTag: String,
     private val sink: ConversationRtmEventSink,
 ) : RtmEventListener {
+    private companion object {
+        private const val TAG = "ConversationRtm"
+    }
 
     override fun onLinkStateEvent(event: LinkStateEvent?) {
         super.onLinkStateEvent(event)
         event ?: return
 
-        Log.d(logTag, "Rtm link state changed: ${event.currentState}")
+        Log.d(TAG, "Rtm link state changed: ${event.currentState}")
 
         when (event.currentState) {
             RtmConstants.RtmLinkState.CONNECTED -> sink.onRtmLinkConnected()
@@ -30,7 +32,7 @@ class ConversationRtmEventListener(
     }
 
     override fun onTokenPrivilegeWillExpire(channelName: String) {
-        Log.d(logTag, "RTM onTokenPrivilegeWillExpire $channelName")
+        Log.d(TAG, "RTM onTokenPrivilegeWillExpire $channelName")
     }
 
     override fun onPresenceEvent(event: PresenceEvent) {
