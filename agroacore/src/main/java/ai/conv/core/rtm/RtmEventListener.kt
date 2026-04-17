@@ -9,8 +9,8 @@ import io.agora.rtm.RtmEventListener
 /**
  * 将 RTM 链路事件交给 [sink]，与原先 [ai.nex.interaction.ui.AgentChatViewModel] 内联 listener 行为一致。
  */
-class ConversationRtmEventListener(
-    private val sink: ConversationRtmEventSink,
+class RtmEventListener(
+    private val sink: RtmEventSink,
 ) : RtmEventListener {
     private companion object {
         private const val TAG = "ConversationRtm"

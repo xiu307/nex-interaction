@@ -36,8 +36,8 @@ import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
 import ai.conv.core.rtc.ConversationRtcEventSink
 import ai.conv.core.rtc.joinConversationChannelWithOptions
-import ai.conv.core.rtm.ConversationRtmEventSink
-import ai.conv.core.rtm.ConversationRtmLogin
+import ai.conv.core.rtm.RtmEventSink
+import ai.conv.core.rtm.RtmLogin
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
 import ai.nex.interaction.session.ConversationUserTokenLoader
@@ -183,7 +183,7 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    private val rtmEventSink = object : ConversationRtmEventSink {
+    private val rtmEventSink = object : RtmEventSink {
         override fun onRtmLinkConnected() {
             Log.d(TAG, "Rtm connected successfully")
             managerOrNull?.rtmLoginState?.isRtmLogin = true
@@ -272,7 +272,7 @@ class AgentChatViewModel : ViewModel() {
             completion(IllegalStateException("ConvoManager not initialized"))
             return
         }
-        ConversationRtmLogin.loginAfterLogout(
+        RtmLogin.loginAfterLogout(
             client = m.rtmClient,
             rtmToken = rtmToken,
             state = m.rtmLoginState,
@@ -284,7 +284,7 @@ class AgentChatViewModel : ViewModel() {
 
     private fun logoutRtm() {
         val m = managerOrNull ?: return
-        ConversationRtmLogin.logout(m.rtmClient, m.rtmLoginState, TAG)
+        RtmLogin.logout(m.rtmClient, m.rtmLoginState, TAG)
     }
 
     /**

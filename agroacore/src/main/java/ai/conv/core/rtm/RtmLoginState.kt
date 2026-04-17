@@ -2,7 +2,7 @@ package ai.conv.core.rtm
 
 /**
  * RTM 登录流程与 [io.agora.rtm.RtmEventListener.onLinkStateEvent] 共用的连接标志位。
- * 由 [ConversationRtmLogin] 与 UI 层 listener 协同更新。
+ * 由 [RtmLogin] 与 UI 层 listener 协同更新。
  */
 class RtmLoginState {
     @Volatile

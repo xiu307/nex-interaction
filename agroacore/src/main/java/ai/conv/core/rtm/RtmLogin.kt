@@ -8,7 +8,7 @@ import io.agora.rtm.RtmClient
 /**
  * RTM 先 logout 再 login 的登录流程，及 [logout]；与原先 [ai.nex.interaction.ui.AgentChatViewModel] 内联逻辑一致。
  */
-object ConversationRtmLogin {
+object RtmLogin {
 
     /**
      * @param logTag 一般为 ViewModel 的 TAG，便于 logcat 过滤。

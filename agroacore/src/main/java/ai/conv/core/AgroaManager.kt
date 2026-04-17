@@ -8,8 +8,8 @@ import ai.conv.core.convoai.IConversationalAIAPI
 import ai.conv.core.convoai.IConversationalAIAPIEventListener
 import ai.conv.core.rtc.ConversationRtcEventListener
 import ai.conv.core.rtc.ConversationRtcEventSink
-import ai.conv.core.rtm.ConversationRtmEventListener
-import ai.conv.core.rtm.ConversationRtmEventSink
+import ai.conv.core.rtm.RtmEventListener
+import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLoginState
 import ai.conv.core.rtm.createConversationRtmConfig
 import ai.conv.core.media.video.ExternalVideoCaptureManager
@@ -39,7 +39,7 @@ class AgroaManager(
     userId: String,
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
     private val rtcEventSink: ConversationRtcEventSink,
-    private val rtmEventSink: ConversationRtmEventSink,
+    private val rtmEventSink: RtmEventSink,
     private val convoAiEventHandler: IConversationalAIAPIEventListener? = null,
 ) {
     private companion object {
@@ -61,8 +61,8 @@ class AgroaManager(
         ConversationRtcEventListener(
             sink = rtcEventSink
         )
-    private val rtmEventListener: ConversationRtmEventListener  =
-        ConversationRtmEventListener(
+    private val rtmEventListener: RtmEventListener  =
+        RtmEventListener(
             sink = rtmEventSink
         )
 
