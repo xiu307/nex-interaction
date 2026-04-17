@@ -11,13 +11,13 @@ import ai.conv.core.rtc.ConversationRtcEventSink
 import ai.conv.core.rtm.RtmEventListener
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLoginState
-import ai.conv.core.rtm.createConversationRtmConfig
 import ai.conv.core.media.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtm.RtmClient
+import io.agora.rtm.RtmConfig
 
 /**
  * 对话管理器配置
@@ -137,7 +137,7 @@ class AgroaManager(
     }
 
     private fun initRtmClient(appId: String, userId: String): RtmClient {
-        val rtmConfig = createConversationRtmConfig(appId, userId)
+        val rtmConfig = RtmConfig.Builder(appId, userId).build()
         return RtmClient.create(rtmConfig)
     }
 }
