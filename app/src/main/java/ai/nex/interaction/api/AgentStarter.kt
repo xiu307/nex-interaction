@@ -190,11 +190,10 @@ object AgentStarter {
                             put("labels", JSONObject().put("userName", deviceId.toString()))
                         })
                     })
-//                    put("bvc", JSONObject().apply {
-//                        put("params", JSONObject().apply {
-//                            put("chunk_size_frames",5)
-//                        })
-//                    })
+                    put("audio3a_downstream", JSONObject().apply {
+                        put("enable_ans", false)
+                        put("passthrough", true)
+                    })
                 })
             })
         }
