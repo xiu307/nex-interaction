@@ -1,0 +1,48 @@
+package ai.conv.core.net
+
+import ai.conv.BuildConfig
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import java.security.KeyStore
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
+
+object SecureOkHttpClient {
+    private fun createTrustManager(): X509TrustManager {
+        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        trustManagerFactory.init(null as KeyStore?)
+        val trustManagers = trustManagerFactory.trustManagers
+        if (trustManagers.size != 1 || trustManagers[0] !is X509TrustManager) {
+            throw IllegalStateException("Unexpected default trust managers: ${trustManagers.contentToString()}")
+        }
+        return trustManagers[0] as X509TrustManager
+    }
+
+    fun create(
+        readTimeout: Duration = 30.seconds,
+        writeTimeout: Duration = 30.seconds,
+        connectTimeout: Duration = 30.seconds,
+        redactSensitiveFields: Boolean = !BuildConfig.DEBUG,
+    ): OkHttpClient.Builder {
+        val trustManager = createTrustManager()
+        val sslContext = SSLContext.getInstance("TLS").apply {
+            init(null, arrayOf(trustManager), null)
+        }
+
+        return OkHttpClient.Builder()
+            .writeTimeout(writeTimeout.toJavaDuration())
+            .readTimeout(readTimeout.toJavaDuration())
+            .connectTimeout(connectTimeout.toJavaDuration())
+            .sslSocketFactory(sslContext.socketFactory, trustManager)
+            .hostnameVerifier { hostname, session ->
+                HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
+            }
+            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            .addInterceptor(LoggerInterceptor(redactSensitiveFields = redactSensitiveFields))
+    }
+}

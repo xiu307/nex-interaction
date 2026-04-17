@@ -1,7 +1,7 @@
 package ai.nex.interaction.session
 
-import ai.conv.api.AgentRepository
-import ai.conv.api.TokenGenerator
+import ai.conv.core.net.repository.AgentRepository
+import ai.conv.core.net.repository.TokenGenerator
 
 /**
  * 在 RTC/RTM 已就绪后，为当前频道拉取 Agent 用 Token 并调用 [AgentRepository] 启停云端 Agent。
