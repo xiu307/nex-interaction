@@ -1,4 +1,4 @@
-package ai.conv.internal.rtc
+package ai.conv.core.rtc
 
 import io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER
 import io.agora.rtc2.ChannelMediaOptions

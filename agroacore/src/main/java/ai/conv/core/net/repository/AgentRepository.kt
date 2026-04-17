@@ -1,8 +1,8 @@
-package ai.conv.api
+package ai.conv.core.net.repository
 
+import ai.conv.core.config.AgroaConfig
+import ai.conv.core.net.SecureOkHttpClient
 import android.util.Log
-import ai.conv.api.net.SecureOkHttpClient
-import ai.conv.internal.config.AgroaConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -72,7 +72,8 @@ object AgentRepository {
                 throw RuntimeException("Start agent error: httpCode=${response.code}, httpMsg=$errorBody")
             }
 
-            val body = response.body?.string() ?: throw RuntimeException("Start agent response body is null")
+            val body = response.body?.string()
+                ?: throw RuntimeException("Start agent response body is null")
             val bodyJson = JSONObject(body)
             val agentId = bodyJson.optString("agent_id", "")
 

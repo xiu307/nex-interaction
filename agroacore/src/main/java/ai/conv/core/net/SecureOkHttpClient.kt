@@ -1,4 +1,4 @@
-package ai.conv.api.net
+package ai.conv.core.net
 
 import ai.conv.BuildConfig
 import okhttp3.OkHttpClient
@@ -43,6 +43,6 @@ object SecureOkHttpClient {
                 HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
             }
             .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-            .addInterceptor(HttpLogger(redactSensitiveFields = redactSensitiveFields))
+            .addInterceptor(LoggerInterceptor(redactSensitiveFields = redactSensitiveFields))
     }
 }

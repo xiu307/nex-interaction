@@ -1,4 +1,4 @@
-package ai.conv.internal.rtm
+package ai.conv.core.rtm
 
 import android.util.Log
 import io.agora.rtm.ErrorInfo

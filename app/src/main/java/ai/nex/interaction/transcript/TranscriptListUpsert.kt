@@ -1,6 +1,6 @@
 package ai.nex.interaction.transcript
 
-import ai.conv.internal.convoai.Transcript
+import ai.conv.core.convoai.Transcript
 
 /**
  * 有就更新没有就插入

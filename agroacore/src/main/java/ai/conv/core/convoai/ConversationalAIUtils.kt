@@ -1,4 +1,4 @@
-package ai.conv.internal.convoai
+package ai.conv.core.convoai
 
 import android.os.Handler
 import android.os.Looper

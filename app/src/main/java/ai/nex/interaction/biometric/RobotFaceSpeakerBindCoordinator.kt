@@ -2,8 +2,8 @@ package ai.nex.interaction.biometric
 
 import android.util.Log
 import ai.nex.interaction.session.ConversationRtmPeers
-import ai.conv.internal.convoai.Transcript
-import ai.conv.internal.convoai.TranscriptType
+import ai.conv.core.convoai.Transcript
+import ai.conv.core.convoai.TranscriptType
 import io.agora.rtm.RtmClient
 
 /**

@@ -1,7 +1,7 @@
 package ai.nex.interaction.session
 
 /**
- * 对话 Agent 侧状态：云端返回的 [agentId] 与 REST [authToken]（与 [ai.conv.api.AgentRepository] 配套）。
+ * 对话 Agent 侧状态：云端返回的 [agentId] 与 REST [authToken]（与 [ai.conv.core.net.repository.AgentRepository] 配套）。
  */
 class AgentSessionState {
     var agentId: String? = null

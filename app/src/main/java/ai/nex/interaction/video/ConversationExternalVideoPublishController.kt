@@ -1,8 +1,8 @@
 package ai.nex.interaction.video
 
-import ai.conv.internal.audio.CustomAudioInputManager
-import ai.conv.internal.rtc.buildConversationChannelMediaOptions
-import ai.conv.internal.video.ExternalVideoCaptureManager
+import ai.conv.core.media.audio.CustomAudioInputManager
+import ai.conv.core.rtc.buildConversationChannelMediaOptions
+import ai.conv.core.media.video.ExternalVideoCaptureManager
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.session.ConnectionSessionState
 import io.agora.rtc2.Constants.ERR_OK
@@ -11,7 +11,7 @@ import io.agora.rtc2.video.AgoraVideoFrame
 
 /**
  * RTC 自定义视频轨的发布开关与推帧，集中管理 [isCustomVideoPublishing] 与
- * [ai.conv.internal.video.ExternalVideoCaptureManager] 的帧开关。
+ * [ExternalVideoCaptureManager] 的帧开关。
  */
 class ConversationExternalVideoPublishController(
     private val rtcEngine: () -> RtcEngineEx?,

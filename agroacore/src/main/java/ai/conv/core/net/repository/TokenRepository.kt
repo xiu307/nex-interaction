@@ -1,7 +1,7 @@
-package ai.conv.api
+package ai.conv.core.net.repository
 
-import ai.conv.api.net.SecureOkHttpClient
-import ai.conv.internal.config.AgroaConfig
+import ai.conv.core.config.AgroaConfig
+import ai.conv.core.net.SecureOkHttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

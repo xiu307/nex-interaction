@@ -1,4 +1,4 @@
-package ai.conv.internal.convoai.subRender
+package ai.conv.core.convoai.subRender
 
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy

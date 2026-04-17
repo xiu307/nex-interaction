@@ -1,4 +1,4 @@
-package ai.conv.api.net
+package ai.conv.core.net
 
 import android.util.Log
 import okhttp3.HttpUrl
@@ -12,7 +12,7 @@ import java.nio.charset.Charset
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-class HttpLogger(
+class LoggerInterceptor(
     private val redactSensitiveFields: Boolean = false,
 ) : Interceptor {
     companion object {

@@ -1,4 +1,4 @@
-package ai.conv.internal.convoai.subRender
+package ai.conv.core.convoai.subRender
 
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IAudioFrameObserver
@@ -9,17 +9,16 @@ import io.agora.rtm.MessageEvent
 import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
-import ai.conv.internal.convoai.ConversationalAIAPI_VERSION
-import ai.conv.internal.convoai.ConversationalAIUtils
-import ai.conv.internal.convoai.InterruptEvent
-import ai.conv.internal.convoai.MessageType
-import ai.conv.internal.convoai.SpeakerConfidence
-import ai.conv.internal.convoai.Transcript
-import ai.conv.internal.convoai.TranscriptRenderMode
-import ai.conv.internal.convoai.TranscriptStatus
-import ai.conv.internal.convoai.TranscriptType
-import ai.conv.internal.convoai.VpidsInfo
-import android.util.Log
+import ai.conv.core.convoai.ConversationalAIAPI_VERSION
+import ai.conv.core.convoai.ConversationalAIUtils
+import ai.conv.core.convoai.InterruptEvent
+import ai.conv.core.convoai.MessageType
+import ai.conv.core.convoai.SpeakerConfidence
+import ai.conv.core.convoai.Transcript
+import ai.conv.core.convoai.TranscriptRenderMode
+import ai.conv.core.convoai.TranscriptStatus
+import ai.conv.core.convoai.TranscriptType
+import ai.conv.core.convoai.VpidsInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ticker
 import java.nio.ByteBuffer

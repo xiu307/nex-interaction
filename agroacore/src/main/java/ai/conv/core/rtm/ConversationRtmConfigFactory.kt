@@ -1,4 +1,4 @@
-package ai.conv.internal.rtm
+package ai.conv.core.rtm
 
 import io.agora.rtm.RtmConfig
 

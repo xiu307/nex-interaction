@@ -1,6 +1,6 @@
 package ai.nex.interaction
 
-import ai.conv.internal.config.AgroaConfig
+import ai.conv.core.config.AgroaConfig
 
 object KeyCenter {
     // Shengwang App Credentials

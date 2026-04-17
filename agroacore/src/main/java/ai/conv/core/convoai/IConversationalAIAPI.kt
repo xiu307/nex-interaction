@@ -1,4 +1,4 @@
-package ai.conv.internal.convoai
+package ai.conv.core.convoai
 
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
