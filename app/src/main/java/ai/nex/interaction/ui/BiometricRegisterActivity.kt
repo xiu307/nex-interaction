@@ -532,9 +532,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             {
                 if (isFinishing || isDestroyed) return@postDelayed
                 if (!isStep1Complete() || isRecordingPcm) return@postDelayed
+                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 startPcmRecording()
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
-                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 mainHandler.postDelayed(
                     {
                         if (isFinishing || isDestroyed) return@postDelayed
@@ -561,6 +561,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         }
         if (autoVoiceCaptureRetryCount >= AUTO_VOICE_RETRY_MAX) {
             autoVoiceCaptureActive = false
+            autoVoiceCaptureScheduled = false
+            mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_retry_exhausted)
+            speakGuideTts(R.string.biometric_tts_voice_capture_manual_needed)
             return
         }
         autoVoiceCaptureRetryCount += 1
@@ -570,9 +573,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             {
                 if (isFinishing || isDestroyed) return@postDelayed
                 if (isRecordingPcm || !isStep1Complete()) return@postDelayed
+                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 startPcmRecording()
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
-                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 mainHandler.postDelayed(
                     {
                         if (isFinishing || isDestroyed) return@postDelayed
@@ -989,7 +992,12 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         lastGuideTtsAtMs = now
         val text = getString(textResId)
         if (text.isBlank()) return
-        TTSManager.getInstance().speak(text)
+        val tts = TTSManager.getInstance()
+        if (force) {
+            tts.speak(text)
+        } else {
+            tts.speakNonInterrupting(text)
+        }
     }
 
     private fun refreshSaveRegistrationStatusText() {
