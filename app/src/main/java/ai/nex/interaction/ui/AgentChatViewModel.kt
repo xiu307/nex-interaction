@@ -38,6 +38,7 @@ import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
 import ai.conv.internal.rtc.ConversationRtcEventSink
 import ai.conv.internal.rtc.joinConversationChannelWithOptions
 import ai.conv.internal.rtc.joinConversationChannelExWithOptions
+import ai.conv.internal.rtc.leaveConversationChannelEx
 import ai.conv.internal.rtm.ConversationRtmEventSink
 import ai.conv.internal.rtm.ConversationRtmLogin
 import ai.nex.interaction.api.AgentStarter
@@ -116,6 +117,9 @@ class AgentChatViewModel : ViewModel() {
 
     private val connection = ConnectionSessionState()
     private val agentSession = AgentSessionState()
+    private var currentAgentUid: Int = ConversationSessionIdentity.agentUid
+    private val joinedExUids = linkedSetOf<Int>()
+    private var joinedRemoteRtcUids: List<String> = listOf(userId.toString())
 
     private lateinit var manager: ConvoManager
     private val managerOrNull: ConvoManager?
@@ -151,7 +155,7 @@ class AgentChatViewModel : ViewModel() {
 
         override suspend fun onUserJoined(uid: Int, elapsed: Int) {
             addStatusLog("Rtc onUserJoined, uid:$uid")
-            if (uid == agentUid) {
+            if (uid == currentAgentUid) {
                 Log.d(TAG, "Agent joined the channel, uid: $uid")
             } else {
                 Log.d(TAG, "User joined the channel, uid: $uid")
@@ -160,7 +164,7 @@ class AgentChatViewModel : ViewModel() {
 
         override suspend fun onUserOffline(uid: Int, reason: Int) {
             addStatusLog("Rtc onUserOffline, uid:$uid")
-            if (uid == agentUid) {
+            if (uid == currentAgentUid) {
                 Log.d(TAG, "Agent left the channel, uid: $uid, reason: $reason")
             } else {
                 Log.d(TAG, "User left the channel, uid: $uid, reason: $reason")
@@ -361,6 +365,19 @@ class AgentChatViewModel : ViewModel() {
      */
     private fun leaveRtcChannel() {
         Log.d(TAG, "leaveChannel")
+        val m = managerOrNull
+        val channel = connection.channelName
+        if (m != null && channel.isNotEmpty()) {
+            for (uid in joinedExUids) {
+                leaveConversationChannelEx(
+                    rtcEngine = m.rtcEngine,
+                    channelName = channel,
+                    uid = uid,
+                )
+            }
+        }
+        joinedExUids.clear()
+        joinedRemoteRtcUids = listOf(userId.toString())
         managerOrNull?.rtcEngine?.leaveChannel()
     }
 
@@ -392,10 +409,11 @@ class AgentChatViewModel : ViewModel() {
                 return@launch
             }
             val totalUserNum = getRegisterSALNum()
+            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, totalUserNum)
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
-                agentRtcUid = agentUid.toString(),
-                remoteRtcUids = (userId until userId + totalUserNum).map { it.toString() }
+                agentRtcUid = currentAgentUid.toString(),
+                remoteRtcUids = joinedRemoteRtcUids
             )
             startResult.fold(
                 onSuccess = { outcome ->
@@ -471,6 +489,16 @@ class AgentChatViewModel : ViewModel() {
         Log.e(TAG, "RTM login failed: ${exception.message}", exception)
     }
 
+    /** RTC join 阶段（含 ex uid）失败后统一回滚，避免半连接状态。 */
+    private fun rollbackAfterRtcJoinPhaseFailed(message: String) {
+        stopExternalAudioCapture()
+        leaveRtcChannel()
+        connection.markRtcLeft()
+        _uiState.value = _uiState.value.copy(connectionState = ConnectionState.Error)
+        addStatusLog(message)
+        Log.e(TAG, message)
+    }
+
     fun getRegisterSALNum(): Int {
         var num = 1
         val rawBiometric = KeyCenter.SAL_BIOMETRIC_SAMPLE_URLS
@@ -522,11 +550,24 @@ class AgentChatViewModel : ViewModel() {
             }
 
             val totalUserNum = getRegisterSALNum()
+            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, totalUserNum)
+            joinedExUids.clear()
+            val successfulRemoteUids = mutableListOf(userId.toString())
             for (i in 1 until totalUserNum) {
                 val exUid = userId + i
-                val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString()) ?: return@launch
-                joinRtcChannelEx(exToken, channelName, exUid)
+                val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString())
+                if (exToken == null) {
+                    rollbackAfterRtcJoinPhaseFailed("Generate ex uid token failed, uid=$exUid")
+                    return@launch
+                }
+                if (!joinRtcChannelEx(exToken, channelName, exUid)) {
+                    rollbackAfterRtcJoinPhaseFailed("Join RTC ex failed, uid=$exUid")
+                    return@launch
+                }
+                joinedExUids.add(exUid)
+                successfulRemoteUids.add(exUid.toString())
             }
+            joinedRemoteRtcUids = successfulRemoteUids
 
             // Login RTM with the same unified token
             loginRtm(token) { exception ->

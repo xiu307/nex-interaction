@@ -19,7 +19,16 @@ object ConversationSessionIdentity {
 
     val userId: Int = getOrCreateLocalUserId()
 
-    val agentUid: Int = generateUniqueUid(userId)
+    val agentUid: Int = generateAgentUid(userId, 1)
+
+    fun generateAgentUid(localUserId: Int, totalUserNum: Int): Int {
+        val maxOffset = maxOf(MAX_LOCAL_USER_NUM, totalUserNum.coerceAtLeast(1))
+        var uid: Int
+        do {
+            uid = generateRandomUid()
+        } while (uid in localUserId..(localUserId + maxOffset))
+        return uid
+    }
 
     fun generateRandomChannelName(): String =
         "channel_kotlin_${generateRandomUid()}"
@@ -38,14 +47,6 @@ object ConversationSessionIdentity {
             putInt(KEY_LOCAL_USER_ID, newUserId)
         }
         return newUserId
-    }
-
-    private fun generateUniqueUid(excludeUid: Int): Int {
-        var uid: Int
-        do {
-            uid = generateRandomUid()
-        } while (uid in excludeUid..excludeUid + MAX_LOCAL_USER_NUM)
-        return uid
     }
 
     private fun generateRandomUid(): Int = (100000..999999).random()

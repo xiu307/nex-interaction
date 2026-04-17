@@ -62,3 +62,13 @@ fun joinConversationChannelExWithOptions(
     }
     return rtcEngine?.joinChannelEx(rtcToken, RtcConnection(channelName, uid), options, handler) ?: -1
 }
+
+fun leaveConversationChannelEx(
+    rtcEngine: RtcEngineEx?,
+    channelName: String,
+    uid: Int,
+): Int {
+    val ret = rtcEngine?.leaveChannelEx(RtcConnection(channelName, uid)) ?: -1
+    handlerEx.remove(uid)
+    return ret
+}
