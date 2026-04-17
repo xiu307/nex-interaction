@@ -61,7 +61,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         private const val BUFFER_MULTIPLIER = 2
-        private const val AUTO_VOICE_RECORD_MS = 6000L
+        private const val AUTO_VOICE_RECORD_MS = 12000L
+        private const val AUTO_VOICE_RETRY_MAX = 2
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, BiometricRegisterActivity::class.java))
@@ -160,6 +161,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     private var liveEnrollRunning = false
     private var autoLiveEnrollAttempted = false
     private var autoVoiceCaptureScheduled = false
+    private var autoVoiceCaptureRetryCount = 0
+    private var autoVoiceCaptureActive = false
     private var lastLiveEnrollStartAtMs = 0L
 
     override fun getViewBinding(): ActivityBiometricRegisterBinding {
@@ -516,6 +519,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             PackageManager.PERMISSION_GRANTED
         if (!micOk) return
         autoVoiceCaptureScheduled = true
+        autoVoiceCaptureActive = true
+        autoVoiceCaptureRetryCount = 0
         mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_countdown)
         mainHandler.postDelayed(
             {
@@ -534,6 +539,40 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 )
             },
             500L,
+        )
+    }
+
+    private fun onAutoVoiceUploadResult(success: Boolean) {
+        if (!autoVoiceCaptureActive) return
+        if (success || isStep2Complete()) {
+            autoVoiceCaptureActive = false
+            return
+        }
+        if (!isStep1Complete()) {
+            autoVoiceCaptureActive = false
+            return
+        }
+        if (autoVoiceCaptureRetryCount >= AUTO_VOICE_RETRY_MAX) {
+            autoVoiceCaptureActive = false
+            return
+        }
+        autoVoiceCaptureRetryCount += 1
+        mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_countdown)
+        mainHandler.postDelayed(
+            {
+                if (isFinishing || isDestroyed) return@postDelayed
+                if (isRecordingPcm || !isStep1Complete()) return@postDelayed
+                startPcmRecording()
+                mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
+                mainHandler.postDelayed(
+                    {
+                        if (isFinishing || isDestroyed) return@postDelayed
+                        if (isRecordingPcm) stopPcmRecordingAndUpload()
+                    },
+                    AUTO_VOICE_RECORD_MS,
+                )
+            },
+            1200L,
         )
     }
 
@@ -1068,6 +1107,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         val path = file?.absolutePath ?: run {
             mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
             pcmFile = null
+            onAutoVoiceUploadResult(false)
             return
         }
         mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_upload_pending)
@@ -1077,6 +1117,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             Toast.makeText(this, R.string.biometric_faceid_mismatch_pcm, Toast.LENGTH_SHORT).show()
             pcmFile = null
             refreshStepGates()
+            onAutoVoiceUploadResult(false)
             return
         }
         val faceKey = lastId
@@ -1092,6 +1133,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 refreshStepGates()
                 pcmFile = null
                 finishRegistrationFlowIfReady()
+                onAutoVoiceUploadResult(true)
                 return@launch
             }
             val upload = runCatching {
@@ -1110,12 +1152,14 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 pcmFile = null
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
                 refreshStepGates()
+                onAutoVoiceUploadResult(false)
                 return@launch
             }
             if (upload.ok && !upload.url.isNullOrEmpty()) {
                 BiometricSalRegistry.saveFaceIdToPcmUrl(faceKey, upload.url!!)
                 refreshStepGates()
                 finishRegistrationFlowIfReady()
+                onAutoVoiceUploadResult(true)
             } else {
                 Toast.makeText(
                     this@BiometricRegisterActivity,
@@ -1124,6 +1168,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 ).show()
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
                 refreshStepGates()
+                onAutoVoiceUploadResult(false)
             }
             pcmFile = null
         }

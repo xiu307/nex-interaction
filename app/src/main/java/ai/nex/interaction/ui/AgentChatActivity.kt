@@ -59,8 +59,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private val transcriptAdapter: TranscriptAdapter = TranscriptAdapter()
     private var videoInputPreviewView: PreviewView? = null
     private var isVideoInputStarted = false
-    private var hasAutoNavigatedToBiometricRegister = false
     private var hasShownReRegisterPrompt = false
+    private var hasShownBiometricSoftHint = false
 
     /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
     private var isRtmPayloadFloatExpanded = false
@@ -123,7 +123,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             FaceRtmStreamPublisher.stopAll()
                             viewModel.clearFaceRtmUplinkPayloadPreview()
                             updateFacePreviewFloatVisibility()
-            maybeAutoNavigateToBiometricRegister()
+                            maybeShowBiometricSoftHint()
                         }
                     }
                 }
@@ -322,9 +322,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
             // Start button click listener
             btnStart.setOnClickListener {
-                if (!ensureBiometricRegistrationReady()) {
-                    return@setOnClickListener
-                }
+                maybeShowBiometricSoftHint()
                 // Generate random channel name each time joining channel
                 val channelName = AgentChatViewModel.generateRandomChannelName()
 
@@ -585,36 +583,20 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     }
 
     /**
-     * 前置化注册流程：未完成人脸+声纹 OSS 注册时，不进入会话，直接引导到注册页。
+     * 无感流程：不再强制跳转注册页；仅在未完成注册时给一次轻提示，允许用户先正常对话。
      */
-    private fun ensureBiometricRegistrationReady(): Boolean {
-        if (hasUsableBiometricRegistration()) return true
-        Toast.makeText(
-            this,
-            getString(R.string.biometric_save_only_oss_hint),
-            Toast.LENGTH_LONG,
-        ).show()
-        BiometricRegisterActivity.start(this)
-        return false
-    }
-
-    /**
-     * 进入主页面即前置引导注册：首次进入时若未完成注册，自动跳转注册页。
-     * 已有完整注册（人脸图 OSS + PCM OSS）则不打断当前流程。
-     */
-    private fun maybeAutoNavigateToBiometricRegister() {
-        if (hasAutoNavigatedToBiometricRegister) return
+    private fun maybeShowBiometricSoftHint() {
+        if (hasShownBiometricSoftHint) return
         if (hasUsableBiometricRegistration()) {
             maybePromptReRegister()
             return
         }
-        hasAutoNavigatedToBiometricRegister = true
+        hasShownBiometricSoftHint = true
         Toast.makeText(
             this,
             getString(R.string.biometric_save_only_oss_hint),
             Toast.LENGTH_LONG,
         ).show()
-        BiometricRegisterActivity.start(this)
     }
 
     private fun maybePromptReRegister() {
