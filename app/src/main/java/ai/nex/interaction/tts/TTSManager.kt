@@ -134,6 +134,32 @@ class TTSManager private constructor() {
         }
     }
 
+    /**
+     * Non-interrupting speech: if TTS is already playing, skip this utterance.
+     * Useful for low-priority guidance prompts that should not cut off current audio.
+     */
+    fun speakNonInterrupting(text: String) {
+        if (!checkInitialized() || text.isBlank()) return
+
+        scope.launch {
+            if (isPlaying()) {
+                Log.d(TAG, "Skip non-interrupting TTS because another utterance is playing.")
+                return@launch
+            }
+            val request = TTSRequest(
+                text = text,
+                useOffline = isOfflineMode,
+            )
+            val result = ttsService?.speak(request)
+            result?.onSuccess { taskId ->
+                Log.d(TAG, "Non-interrupting speak task created: $taskId")
+            }?.onFailure { error ->
+                Log.e(TAG, "Non-interrupting speak failed: ${error.message}")
+                callback?.onPlayError(error.message ?: "Unknown TTS error")
+            }
+        }
+    }
+
     fun speakLongText(longText: String) {
         if (!checkInitialized() || longText.isBlank()) return
 
