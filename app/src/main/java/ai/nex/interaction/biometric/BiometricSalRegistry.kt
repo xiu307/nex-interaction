@@ -1,12 +1,10 @@
 package ai.nex.interaction.biometric
 
 import android.content.Context
-import android.provider.Settings
 import ai.nex.interaction.AgentApp
 import ai.nex.interaction.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import java.security.MessageDigest
 
 /**
  * 用户点击「保存到本地」时固化的注册快照（与 Android `BiometricSalRegistry` 字段/键名一致，便于迁移）。
@@ -45,6 +43,7 @@ object BiometricSalRegistry {
     private const val KEY_LAST_REGISTERED_USER_ID = "biometric_last_face_id"
 
     private const val KEY_ROBOT_FACE_RTM = "robot_face_rtm_uplink_enabled"
+    private const val GENERATED_USER_ID_START = 6000
 
     private val gson = Gson()
 
@@ -66,19 +65,13 @@ object BiometricSalRegistry {
     fun getOrCreateUserIdForFaceId(faceId: String): String {
         resolveUserIdByFaceId(faceId)?.let { return it }
         val used = loadFaceIdToUserIdMap().values.toMutableSet().apply { addAll(loadMap().keys) }
-        val deviceId = Settings.Secure.getString(
-            AgentApp.instance().contentResolver,
-            Settings.Secure.ANDROID_ID,
-        ).orEmpty()
-        val seed = if (deviceId.isNotEmpty()) "$deviceId#$faceId" else faceId
-        var attempt = 0
-        var uid: String
-        do {
-            uid = generateDeterministicSixDigitId(seed, attempt)
-            attempt++
-        } while (used.contains(uid))
-        bindFaceIdToUserId(faceId, uid)
-        return uid
+        var uid = GENERATED_USER_ID_START
+        while (used.contains(uid.toString())) {
+            uid++
+        }
+        val generated = uid.toString()
+        bindFaceIdToUserId(faceId, generated)
+        return generated
     }
 
     fun getRegisteredUserIds(): List<String> = getAllStoredPersonRows().map { it.faceId }
@@ -352,23 +345,6 @@ object BiometricSalRegistry {
         } catch (_: Exception) {
             null
         }
-    }
-
-    /**
-     * 基于 seed 生成稳定的 6 位数字 ID（100000..999999），attempt 用于冲突探测。
-     */
-    private fun generateDeterministicSixDigitId(seed: String, attempt: Int): String {
-        val input = "$seed#$attempt"
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(input.toByteArray(Charsets.UTF_8))
-        val value = (
-            ((digest[0].toInt() and 0xFF) shl 24) or
-                ((digest[1].toInt() and 0xFF) shl 16) or
-                ((digest[2].toInt() and 0xFF) shl 8) or
-                (digest[3].toInt() and 0xFF)
-            ).toLong() and 0xFFFFFFFFL
-        val sixDigit = 100000 + (value % 900000).toInt()
-        return sixDigit.toString()
     }
 
     private fun loadFaceIdToUserIdMap(): Map<String, String> {

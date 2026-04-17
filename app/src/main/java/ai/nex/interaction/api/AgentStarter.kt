@@ -3,6 +3,7 @@ package ai.nex.interaction.api
 import android.util.Log
 import ai.nex.interaction.KeyCenter
 import ai.nex.interaction.biometric.BiometricSalRegistry
+import ai.nex.interaction.session.ConversationSessionIdentity
 import ai.nex.interaction.api.net.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,7 +66,6 @@ object AgentStarter {
                 channel = channelName,
                 agentRtcUid = agentRtcUid,
                 token = agentToken,
-                remoteRtcUids = remoteRtcUids
             )
 
             val request = Request.Builder()
@@ -112,7 +112,6 @@ object AgentStarter {
             channel = channelName,
             agentRtcUid = agentRtcUid,
             token = "<agentToken>",
-            remoteRtcUids = remoteRtcUids
         )
         return JSONObject().apply {
             put("url", url)
@@ -134,10 +133,9 @@ object AgentStarter {
         channel: String,
         agentRtcUid: String,
         token: String,
-        remoteRtcUids: List<String>
     ): JSONObject {
         return JSONObject().apply {
-            val deviceId = remoteRtcUids.first().toLongOrNull() ?: 0L
+            val deviceId = ConversationSessionIdentity.userId.toLong()
             put("name", name)
             put("properties", JSONObject().apply {
                 put("channel", channel)
@@ -182,7 +180,7 @@ object AgentStarter {
                             put("timeout_seconds", 5)
                             put("url", "http://42.121.218.208:8080/v1/audio/interrupt_check")
                             put("api_key", KeyCenter.LLM_API_KEY)
-                            put("labels", JSONObject().put("userName", deviceId))
+                            put("labels", JSONObject().put("userName", deviceId.toString()))
                         })
                     })
 //                    put("bvc", JSONObject().apply {

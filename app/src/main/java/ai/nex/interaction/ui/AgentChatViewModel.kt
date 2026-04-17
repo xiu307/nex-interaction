@@ -381,8 +381,9 @@ class AgentChatViewModel : ViewModel() {
             }
         }
         joinedExUids.clear()
-        sessionUserIdsSnapshot = listOf(userId)
-        joinedRemoteRtcUids = listOf(userId.toString())
+        val fallbackUid = sessionUserIdsSnapshot.firstOrNull() ?: userId
+        sessionUserIdsSnapshot = listOf(fallbackUid)
+        joinedRemoteRtcUids = listOf(fallbackUid.toString())
         managerOrNull?.rtcEngine?.leaveChannel()
     }
 
@@ -554,24 +555,31 @@ class AgentChatViewModel : ViewModel() {
                 connectionState = ConnectionState.Connecting
             )
 
-            // Get token if not available, otherwise use existing token
-            val token = connection.unifiedToken[userId.toString()] ?: generateUserToken(userId.toString())
-            if (token == null) {
-                joinInFlight = false
-                return@launch
-            }
-
-            // Join RTC channel with the unified token
-            if (!joinRtcChannel(token, channelName, userId)) {
-                joinInFlight = false
-                return@launch
-            }
-
             val sessionUserIds = buildRtcSessionUserIdList()
             sessionUserIdsSnapshot = sessionUserIds
+            val primaryRtcUid = sessionUserIds.first()
+
+            // RTC 主连接按 faceId 映射后的 userId；RTM 登录仍用固定 userId（ConvoManager 登录标识）。
+            val primaryRtcToken =
+                connection.unifiedToken[primaryRtcUid.toString()] ?: generateUserToken(primaryRtcUid.toString())
+            if (primaryRtcToken == null) {
+                joinInFlight = false
+                return@launch
+            }
+            val rtmToken = connection.unifiedToken[userId.toString()] ?: generateUserToken(userId.toString())
+            if (rtmToken == null) {
+                joinInFlight = false
+                return@launch
+            }
+
+            // Join RTC channel with primary mapped uid
+            if (!joinRtcChannel(primaryRtcToken, channelName, primaryRtcUid)) {
+                joinInFlight = false
+                return@launch
+            }
             currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
             joinedExUids.clear()
-            val successfulRemoteUids = mutableListOf(userId.toString())
+            val successfulRemoteUids = mutableListOf(primaryRtcUid.toString())
             for (exUid in sessionUserIds.drop(1)) {
                 val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString())
                 if (exToken == null) {
@@ -588,7 +596,7 @@ class AgentChatViewModel : ViewModel() {
             joinedRemoteRtcUids = successfulRemoteUids
 
             // Login RTM with the same unified token
-            loginRtm(token) { exception ->
+            loginRtm(rtmToken) { exception ->
                 viewModelScope.launch {
                     if (exception == null) {
                         onRtmLoginSucceeded(channelName)
@@ -607,10 +615,13 @@ class AgentChatViewModel : ViewModel() {
      * - 追加本地注册得到的 userId（可转为 Int 且不重复）。
      */
     private fun buildRtcSessionUserIdList(): List<Int> {
-        val out = linkedSetOf(userId)
-        BiometricSalRegistry.getRegisteredUserIds()
-            .mapNotNull { it.toIntOrNull() }
-            .forEach { out.add(it) }
+        val mapped = BiometricSalRegistry.getRegisteredUserIds().mapNotNull { it.toIntOrNull() }.distinct()
+        val out = linkedSetOf<Int>()
+        if (mapped.isNotEmpty()) {
+            out.addAll(mapped)
+        } else {
+            out.add(userId)
+        }
         return out.toList()
     }
 
