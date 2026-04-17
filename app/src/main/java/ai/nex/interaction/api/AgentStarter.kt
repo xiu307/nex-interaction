@@ -180,9 +180,9 @@ object AgentStarter {
                         put("interrupt_check", JSONObject().apply {
                             put("enabled", true)
                             put("timeout_seconds", 5)
-                            // 复用现有 LLM 配置，避免新增重复配置源
-                            put("url", KeyCenter.LLM_URL)
+                            put("url", "http://42.121.218.208:8080/v1/audio/interrupt_check")
                             put("api_key", KeyCenter.LLM_API_KEY)
+                            put("labels", JSONObject().put("userName", deviceId))
                         })
                     })
 //                    put("bvc", JSONObject().apply {

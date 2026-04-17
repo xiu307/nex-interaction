@@ -343,6 +343,10 @@ class AgentChatViewModel : ViewModel() {
             addStatusLog("Create custom audio track failed ret: $customAudioTrackId")
             return false
         }
+        // 当前设备会以多个本地 uid 进同一频道；主连接看到 ex uid 会被当作“远端用户”。
+        // 这里提前屏蔽这些 ex uid 的订阅，避免把本机自己发布的音频再次拉回本机造成回音/自听。
+        m.rtcEngine.muteRemoteAudioStream(uid, true)
+        m.rtcEngine.muteRemoteVideoStream(uid, true)
         val ret = joinConversationChannelExWithOptions(
             rtcEngine = m.rtcEngine,
             rtcToken = rtcToken,
