@@ -19,14 +19,23 @@ object ConversationSessionIdentity {
 
     val userId: Int = getOrCreateLocalUserId()
 
-    val agentUid: Int = generateAgentUid(userId, 1)
+    val agentUid: Int = generateAgentUid(setOf(userId))
 
     fun generateAgentUid(localUserId: Int, totalUserNum: Int): Int {
-        val maxOffset = maxOf(MAX_LOCAL_USER_NUM, totalUserNum.coerceAtLeast(1))
+        val occupied = buildSet {
+            val maxOffset = maxOf(MAX_LOCAL_USER_NUM, totalUserNum.coerceAtLeast(1))
+            for (uid in localUserId..(localUserId + maxOffset)) {
+                add(uid)
+            }
+        }
+        return generateAgentUid(occupied)
+    }
+
+    fun generateAgentUid(occupiedUids: Set<Int>): Int {
         var uid: Int
         do {
             uid = generateRandomUid()
-        } while (uid in localUserId..(localUserId + maxOffset))
+        } while (occupiedUids.contains(uid))
         return uid
     }
 

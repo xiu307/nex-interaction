@@ -119,7 +119,9 @@ class AgentChatViewModel : ViewModel() {
     private val agentSession = AgentSessionState()
     private var currentAgentUid: Int = ConversationSessionIdentity.agentUid
     private val joinedExUids = linkedSetOf<Int>()
+    private var sessionUserIdsSnapshot: List<Int> = listOf(userId)
     private var joinedRemoteRtcUids: List<String> = listOf(userId.toString())
+    private var joinInFlight: Boolean = false
 
     private lateinit var manager: ConvoManager
     private val managerOrNull: ConvoManager?
@@ -341,8 +343,6 @@ class AgentChatViewModel : ViewModel() {
             addStatusLog("Create custom audio track failed ret: $customAudioTrackId")
             return false
         }
-        m.rtcEngine.muteRemoteAudioStream(uid, true)
-        m.rtcEngine.muteRemoteVideoStream(uid, true)
         val ret = joinConversationChannelExWithOptions(
             rtcEngine = m.rtcEngine,
             rtcToken = rtcToken,
@@ -377,6 +377,7 @@ class AgentChatViewModel : ViewModel() {
             }
         }
         joinedExUids.clear()
+        sessionUserIdsSnapshot = listOf(userId)
         joinedRemoteRtcUids = listOf(userId.toString())
         managerOrNull?.rtcEngine?.leaveChannel()
     }
@@ -394,6 +395,7 @@ class AgentChatViewModel : ViewModel() {
      */
     private fun checkJoinAndLoginComplete() {
         if (connection.rtcAndRtmReady) {
+            joinInFlight = false
             startAgent()
         }
     }
@@ -408,9 +410,8 @@ class AgentChatViewModel : ViewModel() {
                 addStatusLog("Agent already started, agentId=${agentSession.agentId}")
                 return@launch
             }
-            val sessionUserIds = buildRtcSessionUserIdList()
-            val totalUserNum = sessionUserIds.size
-            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, totalUserNum)
+            val sessionUserIds = sessionUserIdsSnapshot.ifEmpty { listOf(userId) }
+            currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
                 agentRtcUid = currentAgentUid.toString(),
@@ -481,6 +482,7 @@ class AgentChatViewModel : ViewModel() {
 
     /** RTM 登录失败：停止采集、离开 RTC 并回到 Error，避免半连接状态。 */
     private fun rollbackAfterRtmLoginFailed(exception: Exception) {
+        joinInFlight = false
         stopExternalAudioCapture()
         leaveRtcChannel()
         connection.markRtcLeft()
@@ -492,6 +494,7 @@ class AgentChatViewModel : ViewModel() {
 
     /** RTC join 阶段（含 ex uid）失败后统一回滚，避免半连接状态。 */
     private fun rollbackAfterRtcJoinPhaseFailed(message: String) {
+        joinInFlight = false
         stopExternalAudioCapture()
         leaveRtcChannel()
         connection.markRtcLeft()
@@ -535,7 +538,12 @@ class AgentChatViewModel : ViewModel() {
      */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun joinChannelAndLogin(channelName: String) {
+        if (joinInFlight || _uiState.value.connectionState != ConnectionState.Idle) {
+            addStatusLog("Join ignored: current state=${_uiState.value.connectionState}")
+            return
+        }
         viewModelScope.launch {
+            joinInFlight = true
             connection.beginJoinAttempt(channelName)
 
             _uiState.value = _uiState.value.copy(
@@ -543,15 +551,21 @@ class AgentChatViewModel : ViewModel() {
             )
 
             // Get token if not available, otherwise use existing token
-            val token = connection.unifiedToken[userId.toString()] ?: generateUserToken(userId.toString()) ?: return@launch
+            val token = connection.unifiedToken[userId.toString()] ?: generateUserToken(userId.toString())
+            if (token == null) {
+                joinInFlight = false
+                return@launch
+            }
 
             // Join RTC channel with the unified token
             if (!joinRtcChannel(token, channelName, userId)) {
+                joinInFlight = false
                 return@launch
             }
 
             val sessionUserIds = buildRtcSessionUserIdList()
-            currentAgentUid = ConversationSessionIdentity.generateAgentUid(userId, sessionUserIds.size)
+            sessionUserIdsSnapshot = sessionUserIds
+            currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
             joinedExUids.clear()
             val successfulRemoteUids = mutableListOf(userId.toString())
             for (exUid in sessionUserIds.drop(1)) {
@@ -696,6 +710,7 @@ class AgentChatViewModel : ViewModel() {
     fun hangup() {
         viewModelScope.launch {
             try {
+                joinInFlight = false
                 val m = managerOrNull ?: return@launch
                 stopFaceUplinkAndExternalAudio()
                 m.conversationalAIAPI.unsubscribeMessage(connection.channelName) { errorInfo ->
@@ -738,6 +753,7 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        joinInFlight = false
         robotFaceSpeakerBind.clearDedupeState()
         stopFaceUplinkAndExternalAudio()
         leaveRtcChannel()
