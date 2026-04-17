@@ -4,12 +4,9 @@ import io.agora.rtc2.IRtcEngineEventHandler
 import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 
 /**
- * RTC 引擎事件回调透传到业务 [sink]。
- *
- * 线程说明：此处不做线程切换，回调线程由 RTC SDK 决定；
- * 业务如需切主线程/协程，请在业务层自行处理。
+ * 为了保证对外接口一致性，统一进行二次封装
  */
-interface ConversationRtcEventSink {
+interface RtcEventSink {
     fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int)
     fun onLeaveChannel(stats: RtcStats?)
     fun onUserJoined(uid: Int, elapsed: Int)
@@ -18,8 +15,8 @@ interface ConversationRtcEventSink {
     fun onRtcTokenWillExpire(token: String?) {}
 }
 
-class ConversationRtcEventListener(
-    private val sink: ConversationRtcEventSink,
+class RtcEventListener(
+    private val sink: RtcEventSink,
 ) : IRtcEngineEventHandler() {
 
     override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {

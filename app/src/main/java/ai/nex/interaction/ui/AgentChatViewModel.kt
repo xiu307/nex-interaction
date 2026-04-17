@@ -34,7 +34,7 @@ import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
-import ai.conv.core.rtc.ConversationRtcEventSink
+import ai.conv.core.rtc.RtcEventSink
 import ai.conv.core.rtc.joinConversationChannelWithOptions
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLogin
@@ -124,7 +124,7 @@ class AgentChatViewModel : ViewModel() {
 
     private val robotFaceSpeakerBind = RobotFaceSpeakerBindCoordinator()
 
-    private val rtcEventSink = object : ConversationRtcEventSink {
+    private val rtcEventSink = object : RtcEventSink {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             viewModelScope.launch {
                 connection.rtcJoined = true

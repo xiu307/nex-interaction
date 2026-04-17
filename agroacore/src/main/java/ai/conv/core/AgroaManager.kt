@@ -6,8 +6,8 @@ import ai.conv.core.convoai.ConversationalAIAPIConfig
 import ai.conv.core.convoai.ConversationalAIAPIImpl
 import ai.conv.core.convoai.IConversationalAIAPI
 import ai.conv.core.convoai.IConversationalAIAPIEventListener
-import ai.conv.core.rtc.ConversationRtcEventListener
-import ai.conv.core.rtc.ConversationRtcEventSink
+import ai.conv.core.rtc.RtcEventListener
+import ai.conv.core.rtc.RtcEventSink
 import ai.conv.core.rtm.RtmEventListener
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLoginState
@@ -38,7 +38,7 @@ class AgroaManager(
     appId: String,
     userId: String,
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
-    private val rtcEventSink: ConversationRtcEventSink,
+    private val rtcEventSink: RtcEventSink,
     private val rtmEventSink: RtmEventSink,
     private val convoAiEventHandler: IConversationalAIAPIEventListener? = null,
 ) {
@@ -57,8 +57,8 @@ class AgroaManager(
     val videoInputManager: ExternalVideoCaptureManager
     val rtmLoginState = RtmLoginState()
 
-    private val rtcEventHandler: ConversationRtcEventListener =
-        ConversationRtcEventListener(
+    private val rtcEventHandler: RtcEventListener =
+        RtcEventListener(
             sink = rtcEventSink
         )
     private val rtmEventListener: RtmEventListener  =
@@ -114,7 +114,7 @@ class AgroaManager(
     private fun initRtcEngine(
         context: Context,
         appId: String,
-        eventHandler: ConversationRtcEventListener
+        eventHandler: RtcEventListener
     ): RtcEngineEx {
         val rtcConfig = RtcEngineConfig().apply {
             mContext = context

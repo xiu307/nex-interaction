@@ -5,10 +5,14 @@ import io.agora.rtm.LinkStateEvent
 import io.agora.rtm.PresenceEvent
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
-
 /**
- * 将 RTM 链路事件交给 [sink]，与原先 [ai.nex.interaction.ui.AgentChatViewModel] 内联 listener 行为一致。
+ * 为了保证对外接口一致性，统一进行二次封装
  */
+interface RtmEventSink {
+    fun onRtmLinkConnected()
+    fun onRtmLinkFailed()
+}
+
 class RtmEventListener(
     private val sink: RtmEventSink,
 ) : RtmEventListener {
