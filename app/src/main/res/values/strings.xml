@@ -45,7 +45,7 @@
     <string name="biometric_live_enroll_cancelled">已停止动态注册</string>
     <string name="biometric_live_enroll_already_running">动态注册进行中，请保持正对镜头并缓慢左右转头</string>
     <string name="biometric_auto_voice_countdown">动态注册成功，正在自动开始声纹录制…</string>
-    <string name="biometric_auto_voice_recording">自动录制声纹中，请自然朗读 6 秒…</string>
+    <string name="biometric_auto_voice_recording">自动录制声纹中，请自然朗读 12 秒…</string>
     <string name="biometric_register_flow_done">注册流程完成，正在返回会话页</string>
     <string name="biometric_reregister_prompt_message">检测到已有注册信息，是否重新注册？</string>
     <string name="biometric_reregister_confirm">重新注册</string>
@@ -121,6 +121,12 @@
     <string name="biometric_sal_ready_yes">是（双 http）</string>
     <string name="biometric_sal_ready_no">否（需 OSS 上传成功）</string>
     <string name="biometric_auto_snapshot_synced">已自动写入本地快照与 biometric_registration.json（双 OSS 成功）</string>
+    <string name="biometric_tts_live_enroll_start">正在进行人脸动态注册，请正对镜头并缓慢左右转头。</string>
+    <string name="biometric_tts_live_enroll_success">人脸注册完成，接下来将自动采集声纹，请自然说话即可。</string>
+    <string name="biometric_tts_voice_capture_prepare">即将开始声纹采集，请保持自然说话。</string>
+    <string name="biometric_tts_voice_capture_start">声纹采集中，请持续说话十秒以上。</string>
+    <string name="biometric_tts_voice_capture_retry">声纹采集未成功，正在自动重试，请继续自然说话。</string>
+    <string name="biometric_tts_register_done">声纹和人脸注册已完成，现在返回会话页面。</string>
 
     <string name="agent_chat_copy_log">复制日志</string>
     <string name="agent_chat_log_copied">已复制到剪贴板</string>
