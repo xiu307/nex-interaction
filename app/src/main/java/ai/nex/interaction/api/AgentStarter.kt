@@ -143,7 +143,7 @@ object AgentStarter {
                 put("channel", channel)
                 put("token", token)
                 put("agent_rtc_uid", agentRtcUid)
-                put("remote_rtc_uids", JSONArray(remoteRtcUids))
+                put("remote_rtc_uids", JSONArray().apply { put("*") })
                 put("enable_string_uid", false)
                 put("idle_timeout", 120)
 
