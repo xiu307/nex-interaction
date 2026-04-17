@@ -168,13 +168,6 @@ object AgentStarter {
 
                 put("turn_detection", buildTurnDetectionJson())
 
-                put("extensionParams", JSONObject().apply {
-                    put("sc", JSONObject().apply {
-                        put("threshold_calc_low_lower_limit", 0.35)
-                        put("threshold_calc_low_upper_limit", 0.35)
-                    })
-                })
-
                 put("parameters", JSONObject().apply {
                     put("data_channel", "rtm")
                     put("enable_flexible", true)
@@ -193,6 +186,14 @@ object AgentStarter {
                     put("audio3a_downstream", JSONObject().apply {
                         put("enable_ans", false)
                         put("passthrough", true)
+                    })
+                    put("bvc", JSONObject().apply {
+                        put("params", JSONObject().apply {
+                            put("vpBVC", JSONObject().apply {
+                                put("threshold_calc_low_lower_limit", 0.35)
+                                put("threshold_calc_low_upper_limit", 0.35)
+                            })
+                        })
                     })
                 })
             })
