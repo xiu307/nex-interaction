@@ -48,6 +48,7 @@ fun joinConversationChannelExWithOptions(
         publishCameraTrack = false
         autoSubscribeAudio = false
         autoSubscribeVideo = false
+        enableAudioRecordingOrPlayout = false
         startPreview = false
     }
     var handler = handlerEx[uid]

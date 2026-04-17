@@ -212,7 +212,7 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
                     config.rtcEngine.pushExternalAudioFrame(
                         buffer,
                         renderTimeMs,
-                        samplesPerChannel,
+                        samplesPerSec,
                         channels,
                         Constants.BytesPerSample.TWO_BYTES_PER_SAMPLE,
                         it
