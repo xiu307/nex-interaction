@@ -33,6 +33,7 @@ import ai.nex.interaction.databinding.ActivityBiometricRegisterBinding
 import ai.nex.interaction.oss.OssStsRuntime
 import ai.nex.interaction.oss.OssTestBucketUploader
 import ai.nex.interaction.oss.OssUploadResult
+import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.ui.common.BaseActivity
 import com.robotchat.facedet.FaceDetector
 import com.robotchat.facedet.callback.FrameAnalysisCallback
@@ -63,6 +64,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         private const val BUFFER_MULTIPLIER = 2
         private const val AUTO_VOICE_RECORD_MS = 12000L
         private const val AUTO_VOICE_RETRY_MAX = 2
+        private const val TTS_GUIDE_DEBOUNCE_MS = 1500L
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, BiometricRegisterActivity::class.java))
@@ -164,6 +166,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     private var autoVoiceCaptureRetryCount = 0
     private var autoVoiceCaptureActive = false
     private var lastLiveEnrollStartAtMs = 0L
+    private var lastGuideTtsAtMs = 0L
 
     override fun getViewBinding(): ActivityBiometricRegisterBinding {
         return ActivityBiometricRegisterBinding.inflate(layoutInflater)
@@ -372,6 +375,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         liveEnrollRunning = true
         refreshFaceButtonsEnabled()
         mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_live_enroll_starting)
+        speakGuideTts(R.string.biometric_tts_live_enroll_start)
         ProcessCameraProvider.getInstance(this).addListener(
             {
                 val provider = runCatching { ProcessCameraProvider.getInstance(this).get() }.getOrNull()
@@ -415,6 +419,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                                     R.string.biometric_live_enroll_success_toast,
                                     Toast.LENGTH_SHORT,
                                 ).show()
+                                speakGuideTts(R.string.biometric_tts_live_enroll_success)
                                 refreshFaceButtonsEnabled()
                                 refreshStepGates()
                                 maybeAutoStartVoiceCapture()
@@ -522,12 +527,14 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         autoVoiceCaptureActive = true
         autoVoiceCaptureRetryCount = 0
         mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_countdown)
+        speakGuideTts(R.string.biometric_tts_voice_capture_prepare)
         mainHandler.postDelayed(
             {
                 if (isFinishing || isDestroyed) return@postDelayed
                 if (!isStep1Complete() || isRecordingPcm) return@postDelayed
                 startPcmRecording()
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
+                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 mainHandler.postDelayed(
                     {
                         if (isFinishing || isDestroyed) return@postDelayed
@@ -558,12 +565,14 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         }
         autoVoiceCaptureRetryCount += 1
         mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_countdown)
+        speakGuideTts(R.string.biometric_tts_voice_capture_retry)
         mainHandler.postDelayed(
             {
                 if (isFinishing || isDestroyed) return@postDelayed
                 if (isRecordingPcm || !isStep1Complete()) return@postDelayed
                 startPcmRecording()
                 mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_auto_voice_recording)
+                speakGuideTts(R.string.biometric_tts_voice_capture_start)
                 mainHandler.postDelayed(
                     {
                         if (isFinishing || isDestroyed) return@postDelayed
@@ -969,8 +978,18 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     private fun finishRegistrationFlowIfReady() {
         if (persistRegistrationSnapshotIfHttpCompleteAfterOss() || persistRegistrationSnapshotIfLocalComplete()) {
             Toast.makeText(this, R.string.biometric_register_flow_done, Toast.LENGTH_SHORT).show()
+            speakGuideTts(R.string.biometric_tts_register_done, force = true)
             finish()
         }
+    }
+
+    private fun speakGuideTts(textResId: Int, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastGuideTtsAtMs < TTS_GUIDE_DEBOUNCE_MS) return
+        lastGuideTtsAtMs = now
+        val text = getString(textResId)
+        if (text.isBlank()) return
+        TTSManager.getInstance().speak(text)
     }
 
     private fun refreshSaveRegistrationStatusText() {
