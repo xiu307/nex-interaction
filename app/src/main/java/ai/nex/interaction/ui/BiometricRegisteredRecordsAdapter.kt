@@ -55,15 +55,22 @@ class BiometricRegisteredRecordsAdapter(
             val row = model.row
             binding.tvFaceId.text = row.faceId
 
-            if (model.snapshotForRow != null) {
-                val s = model.snapshotForRow
-                val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    .format(Date(s.savedAtEpochMs))
+            val snapshot = model.snapshotForRow
+            val faceForDisplay = snapshot?.faceImageOssUrl ?: row.faceImageOssUrl.orEmpty()
+            val pcmForDisplay = snapshot?.pcmOssUrl ?: row.pcmOssUrl.orEmpty()
+            val hasSnapshotContent = faceForDisplay.isNotEmpty() || pcmForDisplay.isNotEmpty()
+            if (hasSnapshotContent) {
+                val timeStr = if (snapshot != null) {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                        .format(Date(snapshot.savedAtEpochMs))
+                } else {
+                    "--"
+                }
                 binding.tvSnapshot.text = ctx.getString(
                     R.string.biometric_record_snapshot_body,
                     timeStr,
-                    s.faceImageOssUrl,
-                    s.pcmOssUrl,
+                    faceForDisplay.ifEmpty { "--" },
+                    pcmForDisplay.ifEmpty { "--" },
                 )
             } else {
                 binding.tvSnapshot.text = ctx.getString(R.string.biometric_record_snapshot_none)

@@ -84,11 +84,10 @@ class BiometricRegisteredRecordsActivity : BaseActivity<ActivityBiometricRegiste
     private fun buildUiModels(): List<RegisteredRecordUiModel> {
         val rows = BiometricSalRegistry.getAllStoredPersonRows()
         val complete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
-        val snap = BiometricSalRegistry.getRegistrationSnapshot()
         return rows.map { row ->
             RegisteredRecordUiModel(
                 row = row,
-                snapshotForRow = snap?.takeIf { it.faceId == row.faceId },
+                snapshotForRow = BiometricSalRegistry.getRegistrationSnapshotForFaceId(row.faceId),
                 salReady = complete.containsKey(row.faceId),
             )
         }

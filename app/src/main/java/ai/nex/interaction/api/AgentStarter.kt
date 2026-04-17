@@ -174,7 +174,17 @@ object AgentStarter {
                     put("data_channel", "rtm")
                     put("enable_flexible", true)
                     put("enable_error_message", true)
-                    put("enable_dump",true)
+                    put("enable_dump", true)
+                    put("cascading_graph", "v1_soseos_multi_user")
+                    put("main", JSONObject().apply {
+                        put("interrupt_check", JSONObject().apply {
+                            put("enabled", true)
+                            put("timeout_seconds", 5)
+                            // 复用现有 LLM 配置，避免新增重复配置源
+                            put("url", KeyCenter.LLM_URL)
+                            put("api_key", KeyCenter.LLM_API_KEY)
+                        })
+                    })
 //                    put("bvc", JSONObject().apply {
 //                        put("params", JSONObject().apply {
 //                            put("chunk_size_frames",5)

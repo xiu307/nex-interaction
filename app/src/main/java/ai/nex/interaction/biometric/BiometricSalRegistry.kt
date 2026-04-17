@@ -38,6 +38,7 @@ object BiometricSalRegistry {
     private const val KEY_MAP = "biometric_sal_face_id_pcm_map"
     private const val KEY_FACE_IMAGE_MAP = "biometric_sal_face_id_face_image_map"
     private const val KEY_REGISTRATION_SNAPSHOT = "biometric_registration_snapshot_v1"
+    private const val KEY_REGISTRATION_SNAPSHOT_MAP = "biometric_registration_snapshot_map_v1"
 
     private const val KEY_ROBOT_FACE_RTM = "robot_face_rtm_uplink_enabled"
 
@@ -47,11 +48,24 @@ object BiometricSalRegistry {
 
     fun saveRegistrationSnapshot(snapshot: BiometricRegistrationSnapshot): String {
         val json = gson.toJson(snapshot)
-        prefs().edit().putString(KEY_REGISTRATION_SNAPSHOT, json).commit()
+        val map = loadRegistrationSnapshotMap().toMutableMap()
+        map[snapshot.faceId] = snapshot
+        prefs().edit()
+            .putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(map))
+            // 保留旧 key，兼容历史读取逻辑
+            .putString(KEY_REGISTRATION_SNAPSHOT, json)
+            .commit()
         return json
     }
 
     fun getRegistrationSnapshot(): BiometricRegistrationSnapshot? {
+        // 优先返回“最近一次 faceId”对应快照，避免旧调用点语义变化。
+        getLastRegisteredFaceId()?.let { fid ->
+            getRegistrationSnapshotForFaceId(fid)?.let { return it }
+        }
+        // 回退：多快照中按时间取最新一条
+        loadRegistrationSnapshotMap().values.maxByOrNull { it.savedAtEpochMs }?.let { return it }
+        // 兼容旧单快照格式
         val json = prefs().getString(KEY_REGISTRATION_SNAPSHOT, "") ?: ""
         if (json.isEmpty()) return null
         return try {
@@ -59,6 +73,15 @@ object BiometricSalRegistry {
         } catch (_: Exception) {
             null
         }
+    }
+
+    fun getRegistrationSnapshotForFaceId(faceId: String): BiometricRegistrationSnapshot? {
+        if (faceId.isEmpty()) return null
+        val fromMap = loadRegistrationSnapshotMap()[faceId]
+        if (fromMap != null) return fromMap
+        // 兼容旧单快照：若 faceId 恰好相等，仍可展示
+        val legacy = getLegacyRegistrationSnapshot()
+        return legacy?.takeIf { it.faceId == faceId }
     }
 
     /** 仅写入 PCM 映射 URL（http 或 local:// 占位），不持久化本地文件路径。 */
@@ -76,11 +99,13 @@ object BiometricSalRegistry {
     fun getAllStoredPersonRows(): List<BiometricStoredPersonRow> {
         val pcmMap = loadMap()
         val faceMap = loadFaceImageMap()
-        val snap = getRegistrationSnapshot()
+        val snapshotMap = loadRegistrationSnapshotMap()
+        val legacySnap = getLegacyRegistrationSnapshot()
         val keys = pcmMap.keys.union(faceMap.keys).toMutableSet()
-        snap?.faceId?.takeIf { it.isNotEmpty() }?.let { keys.add(it) }
+        keys.addAll(snapshotMap.keys.filter { it.isNotEmpty() })
+        legacySnap?.faceId?.takeIf { it.isNotEmpty() }?.let { keys.add(it) }
         return keys.sorted().map { faceId ->
-            val fromSnap = snap?.takeIf { it.faceId == faceId }
+            val fromSnap = snapshotMap[faceId] ?: legacySnap?.takeIf { it.faceId == faceId }
             BiometricStoredPersonRow(
                 faceId = faceId,
                 faceImageOssUrl = faceMap[faceId] ?: fromSnap?.faceImageOssUrl,
@@ -115,13 +140,22 @@ object BiometricSalRegistry {
         if (faceId.isEmpty()) return
         val fm = loadFaceImageMap()
         val pm = loadMap()
+        val sm = loadRegistrationSnapshotMap()
         val faceUrl = fm[faceId]
         val pcmUrl = pm[faceId]
+        val snap = sm[faceId]
         val newFace = if (faceUrl != null) mapOf(faceId to faceUrl) else emptyMap()
         val newPcm = if (pcmUrl != null) mapOf(faceId to pcmUrl) else emptyMap()
+        val newSnap = if (snap != null) mapOf(faceId to snap) else emptyMap()
         val e = prefs().edit()
         e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(newFace))
         e.putString(KEY_MAP, gson.toJson(newPcm))
+        e.putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(newSnap))
+        if (snap == null) {
+            e.remove(KEY_REGISTRATION_SNAPSHOT)
+        } else {
+            e.putString(KEY_REGISTRATION_SNAPSHOT, gson.toJson(snap))
+        }
         for (k in prefs().all.keys.toList()) {
             if (k.startsWith("biometric_local_face_image_") || k.startsWith("biometric_local_pcm_")) {
                 e.remove(k)
@@ -197,13 +231,16 @@ object BiometricSalRegistry {
         if (faceId.isEmpty()) return
         val faceMap = loadFaceImageMap().toMutableMap()
         val pcmMap = loadMap().toMutableMap()
+        val snapshotMap = loadRegistrationSnapshotMap().toMutableMap()
         faceMap.remove(faceId)
         pcmMap.remove(faceId)
+        snapshotMap.remove(faceId)
         val e = prefs().edit()
         e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(faceMap))
         e.putString(KEY_MAP, gson.toJson(pcmMap))
-        val snap = getRegistrationSnapshot()
-        if (snap?.faceId == faceId) {
+        e.putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(snapshotMap))
+        val legacySnap = getLegacyRegistrationSnapshot()
+        if (legacySnap?.faceId == faceId) {
             e.remove(KEY_REGISTRATION_SNAPSHOT)
         }
         if (getLastRegisteredFaceId() == faceId) {
@@ -222,6 +259,7 @@ object BiometricSalRegistry {
         e.remove(KEY_MAP)
         e.remove(KEY_FACE_IMAGE_MAP)
         e.remove(KEY_REGISTRATION_SNAPSHOT)
+        e.remove(KEY_REGISTRATION_SNAPSHOT_MAP)
         e.remove("biometric_last_face_id")
         for (k in prefs().all.keys.toList()) {
             if (k.startsWith("biometric_local_face_image_") || k.startsWith("biometric_local_pcm_")) {
@@ -245,4 +283,25 @@ object BiometricSalRegistry {
 
     fun isRobotFaceRtmEnabled(): Boolean =
         prefs().getBoolean(KEY_ROBOT_FACE_RTM, BuildConfig.DEBUG)
+
+    private fun loadRegistrationSnapshotMap(): Map<String, BiometricRegistrationSnapshot> {
+        val json = prefs().getString(KEY_REGISTRATION_SNAPSHOT_MAP, "") ?: ""
+        if (json.isEmpty()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, BiometricRegistrationSnapshot>>() {}.type
+            gson.fromJson<Map<String, BiometricRegistrationSnapshot>>(json, type) ?: emptyMap()
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun getLegacyRegistrationSnapshot(): BiometricRegistrationSnapshot? {
+        val json = prefs().getString(KEY_REGISTRATION_SNAPSHOT, "") ?: ""
+        if (json.isEmpty()) return null
+        return try {
+            gson.fromJson(json, BiometricRegistrationSnapshot::class.java)
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
