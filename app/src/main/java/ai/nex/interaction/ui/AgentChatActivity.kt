@@ -952,7 +952,9 @@ class TranscriptAdapter : ListAdapter<Transcript, RecyclerView.ViewHolder>(Trans
      */
     class UserViewHolder(private val binding: ItemTranscriptUserBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(transcript: Transcript) {
-            binding.tvTranscriptText.text = transcript.text.ifEmpty { "..." }
+            val speaker = transcript.userId.ifEmpty { "user" }
+            val body = transcript.text.ifEmpty { "..." }
+            binding.tvTranscriptText.text = "[$speaker] $body"
         }
     }
 

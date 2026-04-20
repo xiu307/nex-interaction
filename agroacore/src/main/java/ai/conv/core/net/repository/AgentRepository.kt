@@ -118,13 +118,10 @@ object AgentRepository {
                 put("channel", channel)
                 put("token", token)
                 put("agent_rtc_uid", agentRtcUid)
-                put("remote_rtc_uids", JSONArray().apply {
-                    if (remoteRtcUids.isEmpty()) {
-                        put("*")
-                    } else {
-                        remoteRtcUids.forEach { put(it) }
-                    }
-                })
+                // Multi-user sessions can contain RTC UIDs outside the locally assembled list
+                // (e.g. dynamic joins / partial local registry state). Use wildcard subscription
+                // to avoid dropping ASR for users not present in remoteRtcUids.
+                put("remote_rtc_uids", JSONArray().apply { put("*") })
                 put("enable_string_uid", false)
                 put("idle_timeout", 120)
 

@@ -13,8 +13,10 @@ class TranscriptListUpsertTest {
         turnId: Long,
         type: TranscriptType,
         text: String,
+        userId: String = "1000",
     ) = Transcript(
         turnId = turnId,
+        userId = userId,
         text = text,
         status = TranscriptStatus.IN_PROGRESS,
         type = type,
@@ -46,5 +48,15 @@ class TranscriptListUpsertTest {
         val agent = t(1L, TranscriptType.AGENT, "a")
         val list = emptyList<Transcript>().upsertTranscript(user).upsertTranscript(agent)
         assertEquals(2, list.size)
+    }
+
+    @Test
+    fun same_turn_and_type_different_user_kept() {
+        val u1 = t(1L, TranscriptType.USER, "u1", userId = "6000")
+        val u2 = t(1L, TranscriptType.USER, "u2", userId = "6001")
+        val list = emptyList<Transcript>().upsertTranscript(u1).upsertTranscript(u2)
+        assertEquals(2, list.size)
+        assertEquals("6000", list[0].userId)
+        assertEquals("6001", list[1].userId)
     }
 }
