@@ -1,4 +1,4 @@
-package ai.conv.core.api.net
+package ai.conv.core.net
 
 import okhttp3.OkHttpClient
 import okhttp3.Protocol

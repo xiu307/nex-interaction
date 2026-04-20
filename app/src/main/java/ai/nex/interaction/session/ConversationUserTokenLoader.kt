@@ -1,6 +1,6 @@
 package ai.nex.interaction.session
 
-import ai.conv.core.api.TokenGenerator
+import ai.conv.core.net.repository.TokenGenerator
 
 /**
  * 用户侧 RTC + RTM 共用的统一 Token（演示服务约定：`channelName` 为空字符串）。

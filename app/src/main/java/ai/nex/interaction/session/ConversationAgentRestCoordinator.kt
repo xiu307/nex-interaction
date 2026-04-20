@@ -1,10 +1,10 @@
 package ai.nex.interaction.session
 
-import ai.conv.core.api.AgentStarter
-import ai.conv.core.api.TokenGenerator
+import ai.conv.core.net.repository.AgentRepository
+import ai.conv.core.net.repository.TokenGenerator
 
 /**
- * 在 RTC/RTM 已就绪后，为当前频道拉取 Agent 用 Token 并调用 [AgentStarter] 启停云端 Agent。
+ * 在 RTC/RTM 已就绪后，为当前频道拉取 Agent 用 Token 并调用 [AgentRepository] 启停云端 Agent。
  * 频道级 Token 同时作为 join 体中的 `token` 与 REST `Authorization: agora token=<…>`（参数一致时只需请求一次）。
  *
  * **生产环境**：演示直连 REST 与演示 Token 服务不可用于上线；敏感信息与 Token 签发应在后端完成，客户端只使用短期 Token。
@@ -30,7 +30,7 @@ object ConversationAgentRestCoordinator {
             uid = agentRtcUid,
         )
         val token = tokenResult.getOrElse { return Result.failure(it) }
-        val startResult = AgentStarter.startAgentAsync(
+        val startResult = AgentRepository.startAgentAsync(
             channelName = channelName,
             agentRtcUid = agentRtcUid,
             agentToken = token,
@@ -46,7 +46,7 @@ object ConversationAgentRestCoordinator {
 
     suspend fun stopRemoteAgentIfStarted(agentId: String?, authToken: String?): Result<Unit> {
         val id = agentId ?: return Result.success(Unit)
-        return AgentStarter.stopAgentAsync(
+        return AgentRepository.stopAgentAsync(
             agentId = id,
             authToken = authToken ?: "",
         )

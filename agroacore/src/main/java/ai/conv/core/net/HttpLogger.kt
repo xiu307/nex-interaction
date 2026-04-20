@@ -1,4 +1,4 @@
-package ai.conv.core.api.net
+package ai.conv.core.net
 
 import ai.conv.BuildConfig
 import android.util.Log

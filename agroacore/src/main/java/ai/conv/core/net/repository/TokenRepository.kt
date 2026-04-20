@@ -1,6 +1,6 @@
-package ai.conv.core.api
+package ai.conv.core.net.repository
 
-import ai.conv.core.api.net.SecureOkHttpClient
+import ai.conv.core.net.SecureOkHttpClient
 import ai.conv.core.config.ConvoConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

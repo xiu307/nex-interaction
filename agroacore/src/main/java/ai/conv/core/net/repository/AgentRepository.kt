@@ -1,7 +1,7 @@
-package ai.conv.core.api
+package ai.conv.core.net.repository
 
+import ai.conv.core.net.SecureOkHttpClient
 import android.util.Log
-import ai.conv.core.api.net.SecureOkHttpClient
 import ai.conv.core.config.ConvoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,8 +12,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
-object AgentStarter {
-    private const val TAG = "AgentStarter"
+object AgentRepository {
+    private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
