@@ -1,5 +1,6 @@
 package ai.nex.interaction.ui.common
 
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -35,6 +36,7 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyDefaultOrientationForDevice()
         _binding = getViewBinding()
         if (_binding?.root == null) {
             finish()
@@ -68,6 +70,16 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
     }
 
     open fun initData(){}
+
+    private fun applyDefaultOrientationForDevice() {
+        val isTablet = resources.configuration.smallestScreenWidthDp >= 600
+        requestedOrientation =
+            if (isTablet) {
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+    }
 
     /**
      * Initialize the view.

@@ -213,6 +213,15 @@ object BiometricSalRegistry {
 
     fun getPcmHttpUrl(faceIdKey: String): String? = loadMap()[faceIdKey]
 
+    fun clearPcmUrlForFaceId(faceIdKey: String) {
+        if (faceIdKey.isEmpty()) return
+        val map = loadMap().toMutableMap()
+        if (map.remove(faceIdKey) == null) return
+        prefs().edit()
+            .putString(KEY_MAP, gson.toJson(map))
+            .commit()
+    }
+
     fun getLastRegisteredPcmHttpUrl(): String? =
         getLastRegisteredFaceId()?.let { getPcmHttpUrl(it) }
 

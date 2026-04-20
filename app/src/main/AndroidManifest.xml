@@ -41,13 +41,11 @@
         <activity
             android:name=".ui.BiometricRegisterActivity"
             android:configChanges="locale|layoutDirection"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <activity
             android:name=".ui.BiometricRegisteredRecordsActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

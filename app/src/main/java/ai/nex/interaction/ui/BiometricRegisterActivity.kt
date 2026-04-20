@@ -54,6 +54,10 @@ import java.util.Locale
  * 与 Android `CovBiometricRegisterActivity` 对齐：人脸**视频**入库（相册/录制）→ 封面图 OSS → PCM 录音 → PCM OSS → 保存本地 JSON。
  */
 class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>() {
+    private enum class RegisterStep {
+        FACE,
+        VOICE,
+    }
 
     companion object {
         private const val TAG = "BiometricRegister"
@@ -167,6 +171,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     private var autoVoiceCaptureActive = false
     private var lastLiveEnrollStartAtMs = 0L
     private var lastGuideTtsAtMs = 0L
+    private var currentStep = RegisterStep.FACE
+    private var currentSessionFaceId: String? = null
+    private var hasCapturedVoiceInCurrentSession = false
 
     override fun getViewBinding(): ActivityBiometricRegisterBinding {
         return ActivityBiometricRegisterBinding.inflate(layoutInflater)
@@ -200,11 +207,14 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             btnVoiceStop.setOnClickListener { stopPcmRecordingAndUpload() }
             btnSaveRegistration.setOnClickListener { saveRegistrationBundle() }
             btnViewRegistered.setOnClickListener { BiometricRegisteredRecordsActivity.start(this@BiometricRegisterActivity) }
+            btnStepNext.setOnClickListener { goToVoiceStepIfReady() }
+            btnStepPrev.setOnClickListener { showRegisterStep(RegisterStep.FACE) }
             tvVoiceStatus.text = getString(R.string.biometric_voice_idle)
-            // 默认走自动化动态注册流程；相册入口保留能力但隐藏到当前版本之外
+            // 默认走实时动态注册流程；相册入口保留能力但隐藏到当前版本之外
             btnFaceFromGallery.visibility = android.view.View.GONE
             refreshSaveRegistrationStatusText()
             refreshStepGates()
+            showRegisterStep(RegisterStep.FACE)
         }
         // 避免在 onCreate 同步阶段做 facedet 原生初始化 / 弹权限，部分机型会崩；首帧后再执行
         mBinding?.root?.post {
@@ -259,7 +269,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         applyFaceRecognitionReadyStatusUi(showToastIfRecognitionNull = true)
         refreshFaceButtonsEnabled()
         refreshStepGates()
-        maybeAutoStartLiveEnrollment()
     }
 
     private fun prepareFaceDetectorLikeDemoOnCreate() {
@@ -298,7 +307,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             mBinding?.tvFaceIdStatus?.text = getString(R.string.biometric_face_ready)
         }
         refreshFaceButtonsEnabled()
-        maybeAutoStartLiveEnrollment()
     }
 
     private fun initFaceDetectorIfNeeded() {
@@ -407,6 +415,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                                 mBinding?.previewFace?.visibility = View.VISIBLE
                                 mBinding?.etFaceId?.setText(userId)
                                 BiometricSalRegistry.setLastRegisteredFaceId(userId)
+                                onNewFaceRegistered(userId)
                                 // 动态注册仅拿 embedding：先写 local 占位，解锁后续声纹步骤；需要 OSS 可再走相册视频入口。
                                 BiometricSalRegistry.saveFaceIdToFaceImageUrl(
                                     userId,
@@ -422,7 +431,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                                 speakGuideTts(R.string.biometric_tts_live_enroll_success)
                                 refreshFaceButtonsEnabled()
                                 refreshStepGates()
-                                maybeAutoStartVoiceCapture()
                             }
 
                             override fun onEnrollmentError(message: String) {
@@ -736,6 +744,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                         quality,
                     )
                     BiometricSalRegistry.setLastRegisteredFaceId(userId)
+                    onNewFaceRegistered(userId)
                     refreshStepGates()
                     if (uploadCopy == null) {
                         Toast.makeText(
@@ -838,6 +847,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     private fun isStep2Complete(): Boolean {
         if (!isStep1Complete()) return false
+        if (!hasCapturedVoiceInCurrentSession) return false
         val lastId = BiometricSalRegistry.getLastRegisteredFaceId() ?: return false
         val pcmUrl = BiometricSalRegistry.getPcmHttpUrl(lastId) ?: return false
         if (BiometricSalRegistry.isHttpUrl(pcmUrl)) return true
@@ -885,9 +895,40 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
         if (!isRecordingPcm) {
             m.btnVoiceStart.isEnabled = step1
         }
-        m.btnSaveRegistration.isEnabled = canPersistRegistrationSnapshotWithOssOnly()
+        m.btnStepNext.isEnabled = step1
+        m.btnSaveRegistration.isEnabled =
+            canPersistRegistrationSnapshotWithOssOnly() &&
+            hasCapturedVoiceInCurrentSession
         refreshStepSectionHints()
         syncBiometricDetailStatusLines()
+    }
+
+    private fun showRegisterStep(step: RegisterStep) {
+        val m = mBinding ?: return
+        currentStep = step
+        val showFace = step == RegisterStep.FACE
+        m.sectionStep1.visibility = if (showFace) View.VISIBLE else View.GONE
+        m.sectionStep2.visibility = if (showFace) View.GONE else View.VISIBLE
+        m.sectionStep3.visibility = if (showFace) View.GONE else View.VISIBLE
+    }
+
+    private fun goToVoiceStepIfReady() {
+        if (!isStep1Complete()) {
+            Toast.makeText(this, R.string.biometric_step_next_gate, Toast.LENGTH_SHORT).show()
+            return
+        }
+        showRegisterStep(RegisterStep.VOICE)
+    }
+
+    private fun onNewFaceRegistered(faceId: String) {
+        currentSessionFaceId = faceId
+        hasCapturedVoiceInCurrentSession = false
+        autoVoiceCaptureScheduled = false
+        autoVoiceCaptureActive = false
+        autoVoiceCaptureRetryCount = 0
+        // 新一轮人脸注册后，必须重新采集声纹，避免复用历史声纹直接判定“完成”。
+        BiometricSalRegistry.clearPcmUrlForFaceId(faceId)
+        mBinding?.tvVoiceStatus?.text = getString(R.string.biometric_voice_idle)
     }
 
     /**
@@ -979,6 +1020,9 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
     }
 
     private fun finishRegistrationFlowIfReady() {
+        val activeFaceId = currentSessionFaceId
+        val lastFaceId = BiometricSalRegistry.getLastRegisteredFaceId()
+        if (!hasCapturedVoiceInCurrentSession || activeFaceId.isNullOrEmpty() || activeFaceId != lastFaceId) return
         if (persistRegistrationSnapshotIfHttpCompleteAfterOss() || persistRegistrationSnapshotIfLocalComplete()) {
             Toast.makeText(this, R.string.biometric_register_flow_done, Toast.LENGTH_SHORT).show()
             speakGuideTts(R.string.biometric_tts_register_done, force = true)
@@ -1050,7 +1094,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
 
     private fun startPcmRecording() {
         if (!isStep1Complete()) {
-            Toast.makeText(this, R.string.biometric_gate_step1, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.biometric_step_next_gate, Toast.LENGTH_SHORT).show()
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
@@ -1152,6 +1196,7 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             if (!OssStsRuntime.hasStsEndpoint()) {
                 Log.i(TAG, "PCM OSS: skip (OSS_STS_TOKEN_URL empty)")
                 BiometricSalRegistry.saveFaceIdToPcmUrl(faceKey, BiometricSalRegistry.PCM_URL_LOCAL_ONLY)
+                hasCapturedVoiceInCurrentSession = true
                 Toast.makeText(
                     this@BiometricRegisterActivity,
                     R.string.biometric_oss_sts_not_configured,
@@ -1159,7 +1204,6 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
                 ).show()
                 refreshStepGates()
                 pcmFile = null
-                finishRegistrationFlowIfReady()
                 onAutoVoiceUploadResult(true)
                 return@launch
             }
@@ -1184,8 +1228,8 @@ class BiometricRegisterActivity : BaseActivity<ActivityBiometricRegisterBinding>
             }
             if (upload.ok && !upload.url.isNullOrEmpty()) {
                 BiometricSalRegistry.saveFaceIdToPcmUrl(faceKey, upload.url!!)
+                hasCapturedVoiceInCurrentSession = true
                 refreshStepGates()
-                finishRegistrationFlowIfReady()
                 onAutoVoiceUploadResult(true)
             } else {
                 Toast.makeText(

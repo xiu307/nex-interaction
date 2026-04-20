@@ -129,6 +129,9 @@
     <string name="biometric_tts_voice_capture_retry">声纹采集未成功，正在自动重试，请继续自然说话。</string>
     <string name="biometric_tts_voice_capture_manual_needed">自动采集暂未完成，请点击开始录音继续。</string>
     <string name="biometric_tts_register_done">声纹和人脸注册已完成，现在返回会话页面。</string>
+    <string name="biometric_step_next">下一步：声纹注册</string>
+    <string name="biometric_step_prev">上一步：返回面部注册</string>
+    <string name="biometric_step_next_gate">请先完成人脸注册，再进入下一步。</string>
 
     <string name="agent_chat_copy_log">复制日志</string>
     <string name="agent_chat_log_copied">已复制到剪贴板</string>
