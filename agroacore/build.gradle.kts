@@ -7,6 +7,10 @@ android {
     namespace = "ai.conv"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
@@ -26,6 +30,7 @@ dependencies {
     // Exposed by ConvoManager public API (RtcEngineEx / RtmClient), keep as api for consumers.
     api("io.agora.rtc:agora-special-full:4.5.2.8")
     api("io.agora:agora-rtm-lite:2.2.6")
+    implementation("com.squareup.okhttp3:okhttp:4.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.code.gson:gson:2.11.0")

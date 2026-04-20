@@ -413,10 +413,15 @@ class AgentChatViewModel : ViewModel() {
             }
             val sessionUserIds = sessionUserIdsSnapshot.ifEmpty { listOf(userId) }
             currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
+            val runtimeSalSampleUrls = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
+            val hasIncompleteLocalRegistration =
+                BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
                 agentRtcUid = currentAgentUid.toString(),
-                remoteRtcUids = joinedRemoteRtcUids
+                remoteRtcUids = joinedRemoteRtcUids,
+                runtimeSalSampleUrls = runtimeSalSampleUrls,
+                hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
             )
             startResult.fold(
                 onSuccess = { outcome ->

@@ -1,11 +1,11 @@
-package ai.nex.interaction.api.net
+package ai.conv.core.api.net
 
+import ai.conv.BuildConfig
 import android.util.Log
-import ai.nex.interaction.BuildConfig
+import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.HttpUrl
 import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
@@ -35,23 +35,20 @@ class HttpLogger : Interceptor {
             "app_id"
         )
 
-        // Excluded API paths
         private val EXCLUDE_PATHS = setOf(
-            "/heartbeat",  // Heartbeat API
-            "/ping",       // Ping API
+            "/heartbeat",
+            "/ping",
         )
 
-        // Excluded Content-Types
         private val EXCLUDE_CONTENT_TYPES = setOf(
-            "multipart/form-data",    // File upload
-            "application/octet-stream", // Binary stream
+            "multipart/form-data",
+            "application/octet-stream",
             "image/*",
             "file",
-            "audio/*",                // Audio files
-            "video/*"                 // Video files
+            "audio/*",
+            "video/*"
         )
-        
-        // Paths containing these keywords will also be checked for content type exclusion
+
         private val SENSITIVE_PATH_KEYWORDS = setOf(
             "upload",
             "file",
@@ -64,23 +61,18 @@ class HttpLogger : Interceptor {
         val url = request.url
         val requestId = UUID.randomUUID().toString().substring(0, 8)
 
-        // Check if should completely skip logging or only log results
         val shouldSkipCompletely = shouldSkipLoggingCompletely(request)
         val logResultOnly = shouldLogResultOnly(request)
-        
-        // If not completely skipped and not only logging results, log the request
+
         if (!shouldSkipCompletely && !logResultOnly) {
-            val logContent = buildLogContent(request)
-            Log.d("[$requestId]-Request", logContent)
+            Log.d("[$requestId]-Request", buildLogContent(request))
         } else if (logResultOnly) {
             Log.d("[$requestId]-Request", "Large file upload request: ${request.method} ${request.url}")
         }
 
-        // Execute request
         val startNs = System.nanoTime()
         val response = chain.proceed(request)
-        
-        // If not completely skipping logging, log the response
+
         if (!shouldSkipCompletely) {
             logResponse(response, startNs, url, requestId)
         }
@@ -90,11 +82,8 @@ class HttpLogger : Interceptor {
 
     private fun buildLogContent(request: Request): String {
         val logContent = StringBuilder()
-
-        // Start request info
         logContent.append("curl -X ${request.method}")
 
-        // Add headers
         val headers = mutableListOf<Pair<String, String>>()
         request.body?.contentType()?.let { contentType ->
             headers.add("Content-Type" to contentType.toString())
@@ -111,43 +100,34 @@ class HttpLogger : Interceptor {
                 if (index > 0) {
                     logContent.append(";")
                 }
-                val safeValue = if (!BuildConfig.DEBUG && SENSITIVE_HEADERS.any { name.lowercase().contains(it) }) "***" else value
+                val safeValue =
+                    if (!BuildConfig.DEBUG && SENSITIVE_HEADERS.any { name.lowercase().contains(it) }) "***"
+                    else value
                 logContent.append("$name:$safeValue")
             }
             logContent.append("\"")
         }
 
-        // Add request body
         request.body?.let { body ->
             val buffer = Buffer()
             body.writeTo(buffer)
             val charset = body.contentType()?.charset() ?: Charset.defaultCharset()
             val bodyString = buffer.readString(charset)
-            
-            // Format JSON body
-            val formattedBody = formatJsonString(bodyString)
-            logContent.append(" -d '${formattedBody}'")
+            logContent.append(" -d '${formatJsonString(bodyString)}'")
         }
 
-        // Add URL
-        val urlString = buildUrlString(request.url)
-
-        logContent.append(" \"$urlString\"")
-
+        logContent.append(" \"${buildUrlString(request.url)}\"")
         return logContent.toString()
     }
 
     private fun formatJsonString(input: String): String {
         return try {
-            if (input.trim().startsWith("{")) {
-                JSONObject(input).toString(4)
-            } else if (input.trim().startsWith("[")) {
-                JSONArray(input).toString(4)
-            } else {
-                input
+            when {
+                input.trim().startsWith("{") -> JSONObject(input).toString(4)
+                input.trim().startsWith("[") -> JSONArray(input).toString(4)
+                else -> input
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
             input
         }
     }
@@ -159,30 +139,26 @@ class HttpLogger : Interceptor {
                 append(":").append(url.port)
             }
             append(url.encodedPath)
-            
             if (url.queryParameterNames.isNotEmpty()) {
                 append("?")
                 url.queryParameterNames.forEachIndexed { index, name ->
                     if (index > 0) append("&")
-                    val value = url.queryParameter(name)
-                    append("$name=$value")
+                    append("$name=${url.queryParameter(name)}")
                 }
             }
         }
     }
 
-    // Determine if logging should be completely skipped
     private fun shouldSkipLoggingCompletely(request: Request): Boolean {
         return EXCLUDE_PATHS.any { path -> request.url.encodedPath.contains(path) }
     }
 
-    // Determine if only results should be logged without request body
     private fun shouldLogResultOnly(request: Request): Boolean {
         val path = request.url.encodedPath.lowercase()
         if (SENSITIVE_PATH_KEYWORDS.any { keyword -> path.contains(keyword) }) {
             return true
         }
-        
+
         request.body?.contentType()?.let { contentType ->
             val contentTypeString = contentType.toString()
             if (EXCLUDE_CONTENT_TYPES.any { type ->
@@ -195,7 +171,7 @@ class HttpLogger : Interceptor {
                 return true
             }
         }
-        
+
         return false
     }
 
@@ -232,8 +208,8 @@ class HttpLogger : Interceptor {
                         if (!BuildConfig.DEBUG) {
                             SENSITIVE_PARAMS.forEach { param ->
                                 bodyString = bodyString.replace(
-                                    Regex(""""([^"]*$param[^"]*)"\s*:\s*"([^"]*)""", RegexOption.IGNORE_CASE),
-                                    """"$1":"***"""
+                                    Regex(""""([^"]*$param[^"]*)"\s*:\s*"([^"]*)"""", RegexOption.IGNORE_CASE),
+                                    """"$1":"***""""
                                 )
                             }
                         }
@@ -242,6 +218,7 @@ class HttpLogger : Interceptor {
                 }
             }
         }
+
         Log.d("[$requestId]-Response", logContent)
     }
-} 
+}

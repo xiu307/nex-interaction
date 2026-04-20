@@ -1,12 +1,12 @@
-package ai.nex.interaction.api.net
+package ai.conv.core.api.net
 
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import java.security.KeyStore
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
@@ -26,8 +26,7 @@ object SecureOkHttpClient {
         readTimeout: Duration = 30.seconds,
         writeTimeout: Duration = 30.seconds,
         connectTimeout: Duration = 30.seconds
-    ):
-            OkHttpClient.Builder {
+    ): OkHttpClient.Builder {
         val trustManager = createTrustManager()
         val sslContext = SSLContext.getInstance("TLS").apply {
             init(null, arrayOf(trustManager), null)
@@ -44,4 +43,4 @@ object SecureOkHttpClient {
             .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
             .addInterceptor(HttpLogger())
     }
-} 
+}

@@ -28,7 +28,7 @@ import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.FaceRtmStreamPublisher
-import ai.nex.interaction.api.AgentStarter
+import ai.conv.core.api.AgentStarter
 import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
 import ai.nex.interaction.ui.common.BaseActivity
@@ -525,10 +525,16 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
 
         val totalUserNum = viewModel.getRegisterSALNum()
+        val runtimeSalSampleUrls = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
+        val hasIncompleteLocalRegistration =
+            BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
         val content = AgentStarter.buildStartAgentConfigPreview(
             channelName = channel,
             agentRtcUid = AgentChatViewModel.agentUid.toString(),
-            remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum).map { it.toString() }
+            remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum)
+                .map { it.toString() },
+            runtimeSalSampleUrls = runtimeSalSampleUrls,
+            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
         )
         val textView = androidx.appcompat.widget.AppCompatTextView(this).apply {
             text = content
