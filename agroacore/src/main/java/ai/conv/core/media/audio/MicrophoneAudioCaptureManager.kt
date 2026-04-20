@@ -1,4 +1,4 @@
-package ai.conv.core.audio
+package ai.conv.core.media.audio
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat

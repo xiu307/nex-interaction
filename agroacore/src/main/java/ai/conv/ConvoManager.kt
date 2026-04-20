@@ -1,7 +1,7 @@
 package ai.conv
 
 import android.content.Context
-import ai.conv.core.audio.CustomAudioInputManager
+import ai.conv.core.media.audio.CustomAudioInputManager
 import ai.conv.core.convoai.ConversationalAIAPIConfig
 import ai.conv.core.convoai.ConversationalAIAPIImpl
 import ai.conv.core.convoai.IConversationalAIAPI
@@ -11,7 +11,7 @@ import ai.conv.core.rtm.ConversationRtmEventListener
 import ai.conv.core.rtm.ConversationRtmEventSink
 import ai.conv.core.rtm.RtmLoginState
 import ai.conv.core.rtm.createConversationRtmConfig
-import ai.conv.core.video.ExternalVideoCaptureManager
+import ai.conv.core.media.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig

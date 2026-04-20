@@ -1,8 +1,8 @@
 package ai.conv.core.convoai.subRender
 
-import ai.conv.core.audio.CustomAudioInputManager
-import ai.conv.core.audio.MicrophoneAudioCaptureManager.Companion.CHANNEL_COUNT
-import ai.conv.core.audio.MicrophoneAudioCaptureManager.Companion.SAMPLE_RATE
+import ai.conv.core.media.audio.CustomAudioInputManager
+import ai.conv.core.media.audio.MicrophoneAudioCaptureManager.Companion.CHANNEL_COUNT
+import ai.conv.core.media.audio.MicrophoneAudioCaptureManager.Companion.SAMPLE_RATE
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IAudioFrameObserver
 import io.agora.rtc2.IRtcEngineEventHandler

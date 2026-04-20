@@ -1,4 +1,4 @@
-package ai.conv.core.video
+package ai.conv.core.media.video
 
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.video.AgoraVideoFrame
