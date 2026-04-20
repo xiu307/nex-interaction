@@ -1,10 +1,11 @@
-package ai.conv
+package ai.conv.core
 
 import android.content.Context
 import ai.conv.core.media.audio.CustomAudioInputManager
 import ai.conv.core.convoai.ConversationalAIAPIConfig
 import ai.conv.core.convoai.ConversationalAIAPIImpl
 import ai.conv.core.convoai.IConversationalAIAPI
+import ai.conv.core.convoai.IConversationalAIAPIEventHandler
 import ai.conv.core.rtc.ConversationRtcEngineEventHandler
 import ai.conv.core.rtc.ConversationRtcEventSink
 import ai.conv.core.rtm.ConversationRtmEventListener
@@ -63,7 +64,7 @@ class ConvoManager(
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
     rtcEventSink: ConversationRtcEventSink,
     rtmEventSink: ConversationRtmEventSink,
-    convoAiEventHandler: ai.conv.core.convoai.IConversationalAIAPIEventHandler,
+    convoAiEventHandler: IConversationalAIAPIEventHandler,
     logTag: String = "ConvoManager",
     channelNameProvider: () -> String
 ) {

@@ -7,8 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.nex.interaction.AgentApp
 import ai.nex.interaction.KeyCenter
-import ai.conv.ConvoManager
-import ai.conv.ConvoManagerConfig
+import ai.conv.core.ConvoManager
+import ai.conv.core.ConvoManagerConfig
 import ai.nex.interaction.video.ConversationExternalVideoPublishController
 import ai.conv.core.convoai.AgentState
 import ai.conv.core.convoai.ModuleError
