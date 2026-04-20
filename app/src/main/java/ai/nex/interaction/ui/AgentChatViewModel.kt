@@ -33,12 +33,12 @@ import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
 import ai.nex.interaction.ui.widget.DebugOverlayView
 import androidx.camera.view.PreviewView
-import ai.conv.core.rtc.ConversationRtcEventSink
+import ai.conv.core.rtc.RtcEventSink
 import ai.conv.core.rtc.joinConversationChannelWithOptions
 import ai.conv.core.rtc.joinConversationChannelExWithOptions
 import ai.conv.core.rtc.leaveConversationChannelEx
-import ai.conv.core.rtm.ConversationRtmEventSink
-import ai.conv.core.rtm.ConversationRtmLogin
+import ai.conv.core.rtm.RtmEventSink
+import ai.conv.core.rtm.RtmLogin
 import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
@@ -135,8 +135,8 @@ class AgentChatViewModel : ViewModel() {
 
     private val robotFaceSpeakerBind = RobotFaceSpeakerBindCoordinator()
 
-    private val rtcEventSink = object : ConversationRtcEventSink {
-        override suspend fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
+    private val rtcEventSink = object : RtcEventSink {
+        override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             connection.rtcJoined = true
             managerOrNull?.audioInputManager?.setPublished(true)
             externalVideoPublish.onRtcJoinChannelSuccess()
@@ -145,13 +145,13 @@ class AgentChatViewModel : ViewModel() {
             checkJoinAndLoginComplete()
         }
 
-        override suspend fun onLeaveChannel(stats: RtcStats?) {
+        override fun onLeaveChannel(stats: RtcStats?) {
             stopExternalAudioCapture()
             externalVideoPublish.resetVideoPipelineOnLeaveOrError()
             addStatusLog("Rtc onLeaveChannel")
         }
 
-        override suspend fun onUserJoined(uid: Int, elapsed: Int) {
+        override fun onUserJoined(uid: Int, elapsed: Int) {
             addStatusLog("Rtc onUserJoined, uid:$uid")
             if (uid == currentAgentUid) {
                 Log.d(TAG, "Agent joined the channel, uid: $uid")
@@ -160,7 +160,7 @@ class AgentChatViewModel : ViewModel() {
             }
         }
 
-        override suspend fun onUserOffline(uid: Int, reason: Int) {
+        override fun onUserOffline(uid: Int, reason: Int) {
             addStatusLog("Rtc onUserOffline, uid:$uid")
             if (uid == currentAgentUid) {
                 Log.d(TAG, "Agent left the channel, uid: $uid, reason: $reason")
@@ -169,7 +169,7 @@ class AgentChatViewModel : ViewModel() {
             }
         }
 
-        override suspend fun onRtcEngineError(err: Int) {
+        override fun onRtcEngineError(err: Int) {
             stopExternalAudioCapture()
             externalVideoPublish.resetVideoPipelineOnLeaveOrError()
             _uiState.value = _uiState.value.copy(
@@ -181,7 +181,7 @@ class AgentChatViewModel : ViewModel() {
     }
 
     // RTM event listener
-    private val rtmEventSink = object : ConversationRtmEventSink {
+    private val rtmEventSink = object : RtmEventSink {
         override fun onRtmLinkConnected() {
             Log.d(TAG, "Rtm connected successfully")
             managerOrNull?.rtmLoginState?.isRtmLogin = true
@@ -246,7 +246,6 @@ class AgentChatViewModel : ViewModel() {
                 context = AgentApp.instance(),
                 appId = KeyCenter.APP_ID,
                 userId = userId.toString(),
-                scope = viewModelScope,
                 config = ConvoManagerConfig(
                     enableConvoAiLog = true,
                     onAudioInputInterrupted = {
@@ -273,7 +272,7 @@ class AgentChatViewModel : ViewModel() {
             completion(IllegalStateException("ConvoManager not initialized"))
             return
         }
-        ConversationRtmLogin.loginAfterLogout(
+        RtmLogin.loginAfterLogout(
             client = m.rtmClient,
             rtmToken = rtmToken,
             state = m.rtmLoginState,
@@ -285,7 +284,7 @@ class AgentChatViewModel : ViewModel() {
 
     private fun logoutRtm() {
         val m = managerOrNull ?: return
-        ConversationRtmLogin.logout(m.rtmClient, m.rtmLoginState, TAG)
+        RtmLogin.logout(m.rtmClient, m.rtmLoginState, TAG)
     }
 
     /**

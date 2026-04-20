@@ -6,19 +6,18 @@ import ai.conv.core.convoai.ConversationalAIAPIConfig
 import ai.conv.core.convoai.ConversationalAIAPIImpl
 import ai.conv.core.convoai.IConversationalAIAPI
 import ai.conv.core.convoai.IConversationalAIAPIEventHandler
-import ai.conv.core.rtc.ConversationRtcEngineEventHandler
-import ai.conv.core.rtc.ConversationRtcEventSink
-import ai.conv.core.rtm.ConversationRtmEventListener
-import ai.conv.core.rtm.ConversationRtmEventSink
+import ai.conv.core.rtc.RtcEventHandler
+import ai.conv.core.rtc.RtcEventSink
+import ai.conv.core.rtm.RtmEventHandler
+import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLoginState
-import ai.conv.core.rtm.createConversationRtmConfig
 import ai.conv.core.media.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtm.RtmClient
-import kotlinx.coroutines.CoroutineScope
+import io.agora.rtm.RtmConfig
 
 /**
  * 对话管理器配置
@@ -43,7 +42,6 @@ data class ConvoManagerConfig(
  *     context = context,
  *     appId = ConvoConfig.APP_ID,
  *     userId = userId.toString(),
- *     scope = viewModelScope,
  *     config = ConvoManagerConfig(
  *         autoStartAudioInput = true,
  *         onAudioInputInterrupted = { /* handle */ }
@@ -60,10 +58,9 @@ class ConvoManager(
     context: Context,
     appId: String,
     userId: String,
-    private val scope: CoroutineScope,
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
-    rtcEventSink: ConversationRtcEventSink,
-    rtmEventSink: ConversationRtmEventSink,
+    rtcEventSink: RtcEventSink,
+    rtmEventSink: RtmEventSink,
     convoAiEventHandler: IConversationalAIAPIEventHandler,
     logTag: String = "ConvoManager",
     channelNameProvider: () -> String
@@ -83,17 +80,17 @@ class ConvoManager(
     val videoInputManager: ExternalVideoCaptureManager
     val rtmLoginState = RtmLoginState()
 
-    private val rtcEventHandler: ConversationRtcEngineEventHandler
-    private val rtmEventListener: ConversationRtmEventListener
-
-    init {
-        // 初始化 RTC（使用真正的 event sink）
-        rtcEventHandler = ConversationRtcEngineEventHandler(
-            scope = scope,
+    // 初始化 RTC（使用真正的 event sink）
+    private val rtcEventHandler: RtcEventHandler =
+        RtcEventHandler(
             logTag = logTag,
             channelNameProvider = channelNameProvider,
             sink = rtcEventSink
         )
+    private val rtmEventHandler: RtmEventHandler =
+        RtmEventHandler(logTag, rtmEventSink)
+
+    init {
         rtcEngine = initRtcEngine(context, appId, rtcEventHandler)
 
         // 初始化音视频管理器
@@ -105,8 +102,8 @@ class ConvoManager(
 
         // 初始化 RTM
         rtmClient = initRtmClient(appId, userId)
-        rtmEventListener = ConversationRtmEventListener(logTag, rtmEventSink)
-        rtmClient.addEventListener(rtmEventListener)
+
+        rtmClient.addEventListener(rtmEventHandler)
 
         // 初始化 ConvoAI
         conversationalAIAPI = ConversationalAIAPIImpl(
@@ -126,7 +123,7 @@ class ConvoManager(
      */
     fun destroy() {
         // 移除事件监听
-        rtmClient.removeEventListener(rtmEventListener)
+        rtmClient.removeEventListener(rtmEventHandler)
 
         // 释放 ConvoAI
         conversationalAIAPI.destroy()
@@ -142,7 +139,7 @@ class ConvoManager(
     private fun initRtcEngine(
         context: Context,
         appId: String,
-        eventHandler: ConversationRtcEngineEventHandler
+        eventHandler: RtcEventHandler
     ): RtcEngineEx {
         val rtcConfig = RtcEngineConfig().apply {
             mContext = context
@@ -165,7 +162,7 @@ class ConvoManager(
     }
 
     private fun initRtmClient(appId: String, userId: String): RtmClient {
-        val rtmConfig = createConversationRtmConfig(appId, userId)
+        val rtmConfig = RtmConfig.Builder(appId, userId).build()
         return RtmClient.create(rtmConfig)
     }
 }
