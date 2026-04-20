@@ -31,12 +31,11 @@ import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.api.AgentStarter
 import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
-import ai.nex.interaction.ui.widget.DebugOverlayView
 import ai.nex.interaction.ui.common.BaseActivity
 import ai.nex.interaction.video.CameraVideoInputManager
-import ai.conv.internal.convoai.AgentState
-import ai.conv.internal.convoai.Transcript
-import ai.conv.internal.convoai.TranscriptType
+import ai.conv.core.convoai.AgentState
+import ai.conv.core.convoai.Transcript
+import ai.conv.core.convoai.TranscriptType
 import ai.nex.interaction.databinding.ActivityAgentChatBinding
 import ai.nex.interaction.databinding.ItemTranscriptUserBinding
 import ai.nex.interaction.databinding.ItemTranscriptAgentBinding

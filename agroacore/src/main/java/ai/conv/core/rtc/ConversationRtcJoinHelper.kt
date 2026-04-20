@@ -1,4 +1,4 @@
-package ai.conv.internal.rtc
+package ai.conv.core.rtc
 
 import android.util.Log
 import io.agora.rtc2.ChannelMediaOptions

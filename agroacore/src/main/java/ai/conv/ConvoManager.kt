@@ -1,17 +1,17 @@
 package ai.conv
 
 import android.content.Context
-import ai.conv.internal.audio.CustomAudioInputManager
-import ai.conv.internal.convoai.ConversationalAIAPIConfig
-import ai.conv.internal.convoai.ConversationalAIAPIImpl
-import ai.conv.internal.convoai.IConversationalAIAPI
-import ai.conv.internal.rtc.ConversationRtcEngineEventHandler
-import ai.conv.internal.rtc.ConversationRtcEventSink
-import ai.conv.internal.rtm.ConversationRtmEventListener
-import ai.conv.internal.rtm.ConversationRtmEventSink
-import ai.conv.internal.rtm.RtmLoginState
-import ai.conv.internal.rtm.createConversationRtmConfig
-import ai.conv.internal.video.ExternalVideoCaptureManager
+import ai.conv.core.audio.CustomAudioInputManager
+import ai.conv.core.convoai.ConversationalAIAPIConfig
+import ai.conv.core.convoai.ConversationalAIAPIImpl
+import ai.conv.core.convoai.IConversationalAIAPI
+import ai.conv.core.rtc.ConversationRtcEngineEventHandler
+import ai.conv.core.rtc.ConversationRtcEventSink
+import ai.conv.core.rtm.ConversationRtmEventListener
+import ai.conv.core.rtm.ConversationRtmEventSink
+import ai.conv.core.rtm.RtmLoginState
+import ai.conv.core.rtm.createConversationRtmConfig
+import ai.conv.core.video.ExternalVideoCaptureManager
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
@@ -63,7 +63,7 @@ class ConvoManager(
     private val config: ConvoManagerConfig = ConvoManagerConfig(),
     rtcEventSink: ConversationRtcEventSink,
     rtmEventSink: ConversationRtmEventSink,
-    convoAiEventHandler: ai.conv.internal.convoai.IConversationalAIAPIEventHandler,
+    convoAiEventHandler: ai.conv.core.convoai.IConversationalAIAPIEventHandler,
     logTag: String = "ConvoManager",
     channelNameProvider: () -> String
 ) {

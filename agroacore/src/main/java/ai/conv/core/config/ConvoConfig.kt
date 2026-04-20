@@ -1,4 +1,4 @@
-package ai.conv.internal.config
+package ai.conv.core.config
 
 /**
  * 对话 SDK 内置配置源。

@@ -1,6 +1,6 @@
 package ai.nex.interaction
 
-import ai.conv.internal.config.ConvoConfig
+import ai.conv.core.config.ConvoConfig
 
 object KeyCenter {
     // Shengwang App Credentials

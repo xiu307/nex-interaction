@@ -1,4 +1,4 @@
-package ai.conv.internal.audio
+package ai.conv.core.audio
 
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngineEx
