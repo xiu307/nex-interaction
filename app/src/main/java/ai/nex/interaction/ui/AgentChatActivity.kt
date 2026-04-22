@@ -531,6 +531,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         val content = AgentRepository.buildStartAgentConfigPreview(
             channelName = channel,
             agentRtcUid = AgentChatViewModel.agentUid.toString(),
+            labelUserId = AgentChatViewModel.userId.toLong(),
             remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum)
                 .map { it.toString() },
             runtimeSalSampleUrls = runtimeSalSampleUrls,

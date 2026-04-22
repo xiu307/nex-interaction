@@ -418,6 +418,7 @@ class AgentChatViewModel : ViewModel() {
             val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
                 channelName = connection.channelName,
                 agentRtcUid = currentAgentUid.toString(),
+                labelUserId = ConversationSessionIdentity.userId.toLong(),
                 remoteRtcUids = joinedRemoteRtcUids,
                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,

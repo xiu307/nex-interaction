@@ -32,6 +32,8 @@ object AgentRepository {
         agentRtcUid: String,
         agentToken: String,
         authToken: String,
+        /** 设备侧唯一标识（用于 labels.userName / 个性化等标签链路），不要用 remoteRtcUids 的 first。 */
+        labelUserId: Long,
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
@@ -44,6 +46,7 @@ object AgentRepository {
                 channel = channelName,
                 agentRtcUid = agentRtcUid,
                 token = agentToken,
+                labelUserId = labelUserId,
                 remoteRtcUids = remoteRtcUids,
                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
@@ -77,6 +80,7 @@ object AgentRepository {
     fun buildStartAgentConfigPreview(
         channelName: String,
         agentRtcUid: String,
+        labelUserId: Long,
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
@@ -87,6 +91,7 @@ object AgentRepository {
             channel = channelName,
             agentRtcUid = agentRtcUid,
             token = "<agentToken>",
+            labelUserId = labelUserId,
             remoteRtcUids = remoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
@@ -106,11 +111,11 @@ object AgentRepository {
         channel: String,
         agentRtcUid: String,
         token: String,
+        labelUserId: Long,
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {
-        val labelUserId = remoteRtcUids.firstOrNull()?.toLongOrNull() ?: 0L
         val labelUserIdStr = labelUserId.toString()
         return JSONObject().apply {
             put("name", name)

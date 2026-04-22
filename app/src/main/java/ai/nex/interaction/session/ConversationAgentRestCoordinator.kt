@@ -21,6 +21,7 @@ object ConversationAgentRestCoordinator {
     suspend fun startRemoteAgent(
         channelName: String,
         agentRtcUid: String,
+        labelUserId: Long,
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
@@ -35,6 +36,7 @@ object ConversationAgentRestCoordinator {
             agentRtcUid = agentRtcUid,
             agentToken = token,
             authToken = token,
+            labelUserId = labelUserId,
             remoteRtcUids = remoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
