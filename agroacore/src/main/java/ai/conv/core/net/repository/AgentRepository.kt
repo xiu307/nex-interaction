@@ -15,11 +15,14 @@ import org.json.JSONObject
 object AgentRepository {
     private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
-    private const val API_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
+    private const val API_BASE_URL =
+        "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
-    private const val SAL_LAB_PCM_URL_SPEAKER1 = "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
-    private const val SAL_LAB_PCM_URL_SPEAKER2 = "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
+    private const val SAL_LAB_PCM_URL_SPEAKER1 =
+        "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
+    private const val SAL_LAB_PCM_URL_SPEAKER2 =
+        "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
 
@@ -52,12 +55,9 @@ object AgentRepository {
                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
             )
 
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("Content-Type", JSON_MEDIA_TYPE)
+            val request = Request.Builder().url(url).addHeader("Content-Type", JSON_MEDIA_TYPE)
                 .addHeader("Authorization", "agora token=$authToken")
-                .post(requestBody.toString().toRequestBody(JSON_MEDIA_TYPE.toMediaType()))
-                .build()
+                .post(requestBody.toString().toRequestBody(JSON_MEDIA_TYPE.toMediaType())).build()
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -65,7 +65,8 @@ object AgentRepository {
                 throw RuntimeException("Start agent error: httpCode=${response.code}, httpMsg=$errorBody")
             }
 
-            val body = response.body?.string() ?: throw RuntimeException("Start agent response body is null")
+            val body = response.body?.string()
+                ?: throw RuntimeException("Start agent response body is null")
             val bodyJson = JSONObject(body)
             val agentId = bodyJson.optString("agent_id", "")
             if (agentId.isBlank()) {
@@ -143,8 +144,7 @@ object AgentRepository {
                 put("sal", JSONObject().apply {
                     put("sal_mode", "locking")
                     put(
-                        "sample_urls",
-                        buildSalSampleUrlsJson(
+                        "sample_urls", buildSalSampleUrlsJson(
                             enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
                             uidStr = labelUserIdStr,
                             runtimeSalSampleUrls = runtimeSalSampleUrls,
@@ -177,6 +177,8 @@ object AgentRepository {
                             put("vpBVC", JSONObject().apply {
                                 put("threshold_calc_low_lower_limit", 0.35)
                                 put("threshold_calc_low_upper_limit", 0.35)
+                                put("update_similarity_threshold_low", 0.35)
+                                put("hop_size", 300)
                             })
                         })
                     })
@@ -201,23 +203,25 @@ object AgentRepository {
             JSONObject()
         }
 
-        Log.i(TAG, "SAL: runtime sample_urls size=${runtimeSalSampleUrls.size} keys=${runtimeSalSampleUrls.keys}")
+        Log.i(
+            TAG,
+            "SAL: runtime sample_urls size=${runtimeSalSampleUrls.size} keys=${runtimeSalSampleUrls.keys}"
+        )
         if (runtimeSalSampleUrls.isEmpty() && hasIncompleteLocalRegistration) {
             Log.w(
                 TAG,
-                "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" +
-                    "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。"
+                "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" + "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。"
             )
         }
 
-        val hasBiometricEntries =
-            biometricJson.keys().asSequence().any { key ->
-                key.isNotEmpty() && biometricJson.optString(key, "").isNotEmpty()
-            } || runtimeSalSampleUrls.isNotEmpty()
+        val hasBiometricEntries = biometricJson.keys().asSequence().any { key ->
+            key.isNotEmpty() && biometricJson.optString(key, "").isNotEmpty()
+        } || runtimeSalSampleUrls.isNotEmpty()
 
         val out = JSONObject()
         if (enablePersonalized) {
-            ConvoConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { out.put(uidStr, it) }
+            ConvoConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }
+                ?.let { out.put(uidStr, it) }
         }
 
         val envKeys = biometricJson.keys()
@@ -314,16 +318,13 @@ object AgentRepository {
     }
 
     suspend fun stopAgentAsync(
-        agentId: String,
-        authToken: String
+        agentId: String, authToken: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val url = "$API_BASE_URL/${ConvoConfig.APP_ID}/agents/$agentId/leave"
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "agora token=$authToken")
-                .post("".toRequestBody(JSON_MEDIA_TYPE.toMediaType()))
-                .build()
+            val request =
+                Request.Builder().url(url).addHeader("Authorization", "agora token=$authToken")
+                    .post("".toRequestBody(JSON_MEDIA_TYPE.toMediaType())).build()
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
