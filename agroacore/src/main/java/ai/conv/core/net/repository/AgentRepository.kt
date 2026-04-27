@@ -19,10 +19,6 @@ object AgentRepository {
         "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
-    private const val SAL_LAB_PCM_URL_SPEAKER1 =
-        "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
-    private const val SAL_LAB_PCM_URL_SPEAKER2 =
-        "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
 
@@ -240,8 +236,8 @@ object AgentRepository {
         }
 
         if (!hasBiometricEntries) {
-            out.put(SAL_LAB_SPEAKER1_ID, SAL_LAB_PCM_URL_SPEAKER1)
-            out.put(SAL_LAB_SPEAKER2_ID, SAL_LAB_PCM_URL_SPEAKER2)
+            out.put(SAL_LAB_SPEAKER1_ID, ConvoConfig.SAL_LAB_PCM_URL_SPEAKER1)
+            out.put(SAL_LAB_SPEAKER2_ID, ConvoConfig.SAL_LAB_PCM_URL_SPEAKER2)
         }
         return out
     }

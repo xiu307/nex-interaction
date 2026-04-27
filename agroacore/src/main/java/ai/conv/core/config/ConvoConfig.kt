@@ -35,4 +35,8 @@ object ConvoConfig {
     const val SAL_ENABLE_PERSONALIZED: Boolean = false
     const val SAL_PERSONALIZED_PCM_URL: String = ""
     const val SAL_BIOMETRIC_SAMPLE_URLS: String = ""
+    var SAL_LAB_PCM_URL_SPEAKER1: String =
+        "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
+    var SAL_LAB_PCM_URL_SPEAKER2 =
+        "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
 }
