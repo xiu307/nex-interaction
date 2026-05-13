@@ -13,8 +13,12 @@ object ConvoConfig {
     const val APP_ID: String = "e9e7cafd870849b292c731d4bab44306"
     const val APP_CERTIFICATE: String = "58bccff9667c4d6f863b938a30c95d40"
 
+    const val GEELY_PRIVATE_IP = "47.96.173.253"
+
+    const val USE_PRIVATE_ENV: Boolean = false
+
     const val LLM_API_KEY: String = "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn"
-    const val LLM_URL: String = "http://42.121.218.208:8080/chat/completions"
+    const val LLM_URL: String = "http://${GEELY_PRIVATE_IP}:8080/chat/completions"
     const val LLM_MODEL: String = "qwen-plus"
     const val LLM_VENDOR: String = "custom"
     val LLM_PARRAMS: String = """{"model":"deepseek-chat", "max_token":1024}"""
@@ -24,11 +28,11 @@ object ConvoConfig {
     const val ASR_LANG: String = "zh-CN"
     const val ASR_VENDOR: String = "openai"
     val ASR_PARAMS: String =
-        """{"base_url": "ws://42.121.218.208:8080/realtime?intent=transcription", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "access_key": "", "app_key": "", "resource_id": ""}"""
+        """{"base_url": "ws://${GEELY_PRIVATE_IP}:8080/realtime?intent=transcription", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "access_key": "", "app_key": "", "resource_id": ""}"""
 
     const val TTS_VENDOR: String = "openai"
     val TTS_PARAMS: String =
-        """{"base_url": "http://42.121.218.208:8080/v1", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "model": "gpt-4o-mini-tts", "voice": "coral", "instructions": "", "speed": 1.0}"""
+        """{"base_url": "http://${GEELY_PRIVATE_IP}:8080/v1", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "model": "gpt-4o-mini-tts", "voice": "coral", "instructions": "", "speed": 1.0}"""
     const val TTS_BYTEDANCE_APP_ID: String = ""
     const val TTS_BYTEDANCE_TOKEN: String = ""
 
@@ -42,9 +46,15 @@ object ConvoConfig {
     var SAL_LAB_PCM_URL_SPEAKER2 =
         "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
 
-    const val INTERRUPT_CHECK_URL: String = "http://42.121.218.208:8080/v1/audio/interrupt_check"
-    const val BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
+    const val INTERRUPT_CHECK_URL: String = "http://${GEELY_PRIVATE_IP}:8080/v1/audio/interrupt_check"
+    const val PRE_REG_CALLBACK_URL: String = "http://${GEELY_PRIVATE_IP}:8080/v1/voice_print/register_status"
+
+    const val PRIVATE_BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
     const val PRIVATE_DOMAIN_LIST = "ap.1405669.agora.local"
-    const val PRIVATE_IP_LIST = "47.96.173.253"
-    const val CONVO_REQUEST_IP = "http://47.96.173.253:9090"
+    const val PRIVATE_BASE_URL = "http://${GEELY_PRIVATE_IP}:9090/api/conversational-ai-agent/v2/projects"
+    const val PUBLIC_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
+
+    const val STT_UPLOADER_KEY = ""
+    const val STT_UPLOADER_SECRET = ""
+
 }

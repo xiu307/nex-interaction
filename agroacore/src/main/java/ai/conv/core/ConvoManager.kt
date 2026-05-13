@@ -98,15 +98,16 @@ class ConvoManager(
 
     init {
         rtcEngine = initRtcEngine(context, appId, rtcEventHandler)
-        val localConfig = LocalAccessPointConfiguration()
-        val iplist = ArrayList<String?>()
-        iplist.add(ConvoConfig.PRIVATE_IP_LIST)
-        localConfig.ipList = iplist
-        localConfig.mode = 1
-        localConfig.verifyDomainName = ConvoConfig.PRIVATE_DOMAIN_LIST
-        localConfig.disableAut = false
-        rtcEngine.setLocalAccessPoint(localConfig)
-
+        if (ConvoConfig.USE_PRIVATE_ENV) {
+            val localConfig = LocalAccessPointConfiguration()
+            val iplist = ArrayList<String?>()
+            iplist.add(ConvoConfig.GEELY_PRIVATE_IP)
+            localConfig.ipList = iplist
+            localConfig.mode = 1
+            localConfig.verifyDomainName = ConvoConfig.PRIVATE_DOMAIN_LIST
+            localConfig.disableAut = false
+            rtcEngine.setLocalAccessPoint(localConfig)
+        }
         // 初始化音视频管理器
         audioInputManager = CustomAudioInputManager(
             rtcEngine = rtcEngine,
@@ -176,12 +177,16 @@ class ConvoManager(
     }
 
     private fun initRtmClient(appId: String, userId: String): RtmClient {
-        val hosts = ArrayList<String?>()
-        hosts.add(ConvoConfig.PRIVATE_IP_LIST)
-        val privateConfig = RtmPrivateConfig()
-        privateConfig.setServiceType(EnumSet.of(RtmServiceType.MESSAGE, RtmServiceType.STREAM))
-        privateConfig.accessPointHosts = hosts
-        val rtmConfig = RtmConfig.Builder(appId, userId).privateConfig(privateConfig).build()
+        val rtmConfig = if (ConvoConfig.USE_PRIVATE_ENV) {
+            val hosts = ArrayList<String?>()
+            hosts.add(ConvoConfig.GEELY_PRIVATE_IP)
+            val privateConfig = RtmPrivateConfig()
+            privateConfig.setServiceType(EnumSet.of(RtmServiceType.MESSAGE, RtmServiceType.STREAM))
+            privateConfig.accessPointHosts = hosts
+            RtmConfig.Builder(appId, userId).privateConfig(privateConfig).build()
+        } else {
+            RtmConfig.Builder(appId, userId).build()
+        }
         return RtmClient.create(rtmConfig)
     }
 }
