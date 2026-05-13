@@ -168,6 +168,14 @@ object AgentRepository {
                             put("api_key", ConvoConfig.LLM_API_KEY)
                             put("labels", JSONObject().put("userName", labelUserIdStr))
                         })
+                        put("pre_register", JSONObject().apply {
+                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                            put("api_key", ConvoConfig.LLM_API_KEY)
+                            put("callback_timeout_seconds", 5.0)
+                            put("upload_result_timeout_seconds", 10.0)
+                            put("callback_max_retries", 5)
+                            put("temp_dir", "/tmp/convoai_pre_register")
+                        })
                     })
                     put("audio3a_downstream", JSONObject().apply {
                         put("enable_ans", false)
@@ -188,16 +196,16 @@ object AgentRepository {
 //                            })
                         })
                     })
-                    put("main", JSONObject().apply {
-                        put("pre_register", JSONObject().apply {
-                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                            put("api_key", ConvoConfig.LLM_API_KEY)
-                            put("callback_timeout_seconds", 5.0)
-                            put("upload_result_timeout_seconds", 10.0)
-                            put("callback_max_retries", 5)
-                            put("temp_dir", "/tmp/convoai_pre_register")
-                        })
-                    })
+//                    put("main", JSONObject().apply {
+//                        put("pre_register", JSONObject().apply {
+//                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+//                            put("api_key", ConvoConfig.LLM_API_KEY)
+//                            put("callback_timeout_seconds", 5.0)
+//                            put("upload_result_timeout_seconds", 10.0)
+//                            put("callback_max_retries", 5)
+//                            put("temp_dir", "/tmp/convoai_pre_register")
+//                        })
+//                    })
                     put("stt_uploader", JSONObject().apply {
                         put("config", JSONObject().apply {
                             put("enable", true)
