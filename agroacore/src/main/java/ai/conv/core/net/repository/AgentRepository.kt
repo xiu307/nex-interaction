@@ -138,8 +138,7 @@ object AgentRepository {
                 put("llm", buildLlmJson(labelUserId))
                 put("tts", buildTtsJson())
                 put("sal", JSONObject().apply {
-                    if (ConvoConfig.USE_PRIVATE_ENV) put("sal_mode", "locking")
-                    else put("sal_mode", "pre_register")
+                    put("sal_mode", "pre_register")
                     put(
                         "sample_urls", buildSalSampleUrlsJson(
                             enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
@@ -155,7 +154,7 @@ object AgentRepository {
                     put("enable_flexible", true)
                     put("enable_error_message", true)
                     put("enable_dump", true)
-                    put("cascading_graph", "v1_soseos_multi_user")
+//                    put("cascading_graph", "v1_soseos_multi_user")
                     put("main", JSONObject().apply {
                         put("interrupt_check", JSONObject().apply {
                             put("enabled", true)
@@ -184,6 +183,31 @@ object AgentRepository {
 //                            })
                         })
                     })
+                    put("main", JSONObject().apply {
+                        put("pre_register", JSONObject().apply {
+                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                            put("api_key", ConvoConfig.LLM_API_KEY)
+                            put("callback_timeout_seconds", 5.0)
+                            put("upload_result_timeout_seconds", 10.0)
+                            put("callback_max_retries", 5)
+                            put("temp_dir", "/tmp/convoai_pre_register")
+                        })
+                    })
+                    put("stt_uploader", JSONObject().apply {
+                        put("config", JSONObject().apply {
+                            put("enable", true)
+                            put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
+                            put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
+                            put("region", 0)
+                            put("vendor", 2)
+                            put("bucket", "ndt-public")
+                            put("fileNamePrefix", JSONArray().apply {
+                                put("shengwen")
+                                put("register")
+                            })
+                        })
+                    })
+
                     if (ConvoConfig.USE_PRIVATE_ENV) {
                         put("rtc", JSONObject().apply {
                             put("domain_list", JSONArray().apply {
@@ -196,31 +220,6 @@ object AgentRepository {
                         put("rtm", JSONObject().apply {
                             put("access_point_hosts", JSONArray().apply {
                                 put(ConvoConfig.GEELY_PRIVATE_IP)
-                            })
-                        })
-                    } else {
-                        put("main", JSONObject().apply {
-                            put("pre_register", JSONObject().apply {
-                                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                                put("api_key", ConvoConfig.LLM_API_KEY)
-                                put("callback_timeout_seconds", 5.0)
-                                put("upload_result_timeout_seconds", 10.0)
-                                put("callback_max_retries", 5)
-                                put("temp_dir", "/tmp/convoai_pre_register")
-                            })
-                        })
-                        put("stt_uploader", JSONObject().apply {
-                            put("config", JSONObject().apply {
-                                put("enable", true)
-                                put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
-                                put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
-                                put("region", 0)
-                                put("vendor", 2)
-                                put("bucket", "ndt-public")
-                                put("fileNamePrefix", JSONArray().apply {
-                                    put("shengwen")
-                                    put("register")
-                                })
                             })
                         })
                     }
