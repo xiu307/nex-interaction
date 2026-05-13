@@ -16,7 +16,7 @@ object AgentRepository {
     private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL =
-        "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
+        "${ConvoConfig.CONVO_REQUEST_IP}/api/conversational-ai-agent/v2/projects"
     private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
     private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
@@ -159,7 +159,7 @@ object AgentRepository {
                         put("interrupt_check", JSONObject().apply {
                             put("enabled", true)
                             put("timeout_seconds", 5)
-                            put("url", "http://42.121.218.208:8080/v1/audio/interrupt_check")
+                            put("url", ConvoConfig.INTERRUPT_CHECK_URL)
                             put("api_key", ConvoConfig.LLM_API_KEY)
                             put("labels", JSONObject().put("userName", labelUserIdStr))
                         })
@@ -169,6 +169,7 @@ object AgentRepository {
                         put("passthrough", true)
                     })
                     put("bvc", JSONObject().apply {
+                        put("url", ConvoConfig.BVC_URL)
                         put("params", JSONObject().apply {
                             put("vpBVC", JSONObject().apply {
                                 put("threshold_calc_low_lower_limit", 0.35)
@@ -176,6 +177,21 @@ object AgentRepository {
                                 put("update_similarity_threshold_low", 0.35)
                                 put("hop_size", 300)
                             })
+                        })
+                    })
+
+                    put("rtc", JSONObject().apply {
+                        put("domain_list", JSONArray().apply {
+                            put(ConvoConfig.PRIVATE_DOMAIN_LIST)
+                        })
+                        put("ip_list", JSONArray().apply {
+                            put(ConvoConfig.PRIVATE_IP_LIST)
+                        })
+                    })
+
+                    put("rtm", JSONObject().apply {
+                        put("access_point_hosts", JSONArray().apply {
+                            put(ConvoConfig.PRIVATE_IP_LIST)
                         })
                     })
                 })

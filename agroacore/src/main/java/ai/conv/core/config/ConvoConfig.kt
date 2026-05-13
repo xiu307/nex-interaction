@@ -41,4 +41,10 @@ object ConvoConfig {
     @JvmField
     var SAL_LAB_PCM_URL_SPEAKER2 =
         "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
+
+    const val INTERRUPT_CHECK_URL: String = "http://42.121.218.208:8080/v1/audio/interrupt_check"
+    const val BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
+    const val PRIVATE_DOMAIN_LIST = "ap.1405669.agora.local"
+    const val PRIVATE_IP_LIST = "47.96.173.253"
+    const val CONVO_REQUEST_IP = "http://47.96.173.253:9090"
 }

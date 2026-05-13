@@ -1,23 +1,29 @@
 package ai.conv.core
 
-import android.content.Context
-import ai.conv.core.media.audio.CustomAudioInputManager
+import ai.conv.core.config.ConvoConfig
 import ai.conv.core.convoai.ConversationalAIAPIConfig
 import ai.conv.core.convoai.ConversationalAIAPIImpl
 import ai.conv.core.convoai.IConversationalAIAPI
 import ai.conv.core.convoai.IConversationalAIAPIEventHandler
+import ai.conv.core.media.audio.CustomAudioInputManager
+import ai.conv.core.media.video.ExternalVideoCaptureManager
 import ai.conv.core.rtc.RtcEventHandler
 import ai.conv.core.rtc.RtcEventSink
 import ai.conv.core.rtm.RtmEventHandler
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLoginState
-import ai.conv.core.media.video.ExternalVideoCaptureManager
+import android.content.Context
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
+import io.agora.rtc2.proxy.LocalAccessPointConfiguration
 import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConfig
+import io.agora.rtm.RtmConstants.RtmServiceType
+import io.agora.rtm.RtmPrivateConfig
+import java.util.EnumSet
+
 
 /**
  * 对话管理器配置
@@ -92,6 +98,14 @@ class ConvoManager(
 
     init {
         rtcEngine = initRtcEngine(context, appId, rtcEventHandler)
+        val localConfig = LocalAccessPointConfiguration()
+        val iplist = ArrayList<String?>()
+        iplist.add(ConvoConfig.PRIVATE_IP_LIST)
+        localConfig.ipList = iplist
+        localConfig.mode = 1
+        localConfig.verifyDomainName = ConvoConfig.PRIVATE_DOMAIN_LIST
+        localConfig.disableAut = false
+        rtcEngine.setLocalAccessPoint(localConfig)
 
         // 初始化音视频管理器
         audioInputManager = CustomAudioInputManager(
@@ -162,7 +176,12 @@ class ConvoManager(
     }
 
     private fun initRtmClient(appId: String, userId: String): RtmClient {
-        val rtmConfig = RtmConfig.Builder(appId, userId).build()
+        val hosts = ArrayList<String?>()
+        hosts.add(ConvoConfig.PRIVATE_IP_LIST)
+        val privateConfig = RtmPrivateConfig()
+        privateConfig.setServiceType(EnumSet.of(RtmServiceType.MESSAGE, RtmServiceType.STREAM))
+        privateConfig.accessPointHosts = hosts
+        val rtmConfig = RtmConfig.Builder(appId, userId).privateConfig(privateConfig).build()
         return RtmClient.create(rtmConfig)
     }
 }
