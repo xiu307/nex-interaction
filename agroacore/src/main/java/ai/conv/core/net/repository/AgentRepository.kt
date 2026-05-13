@@ -37,8 +37,9 @@ object AgentRepository {
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUids=$remoteRtcUids")
-            val url = if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
-                            else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
+            val url =
+                if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
+                else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
             val requestBody = buildJsonPayload(
                 name = channelName,
                 channel = channelName,
@@ -81,8 +82,9 @@ object AgentRepository {
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
     ): String {
-        val url = if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
-                         else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
+        val url =
+            if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
+            else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
         val body = buildJsonPayload(
             name = channelName,
             channel = channelName,
@@ -138,15 +140,18 @@ object AgentRepository {
                 put("llm", buildLlmJson(labelUserId))
                 put("tts", buildTtsJson())
                 put("sal", JSONObject().apply {
-                    put("sal_mode", "pre_register")
-                    put(
-                        "sample_urls", buildSalSampleUrlsJson(
-                            enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
-                            uidStr = labelUserIdStr,
-                            runtimeSalSampleUrls = runtimeSalSampleUrls,
-                            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+                    if (ConvoConfig.ENABLE_PRE_REGISTER)  put("sal_mode", "pre_register")
+                    else {
+                        put("sal_mode", "locking")
+                        put(
+                            "sample_urls", buildSalSampleUrlsJson(
+                                enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
+                                uidStr = labelUserIdStr,
+                                runtimeSalSampleUrls = runtimeSalSampleUrls,
+                                hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+                            )
                         )
-                    )
+                    }
                 })
                 put("turn_detection", buildTurnDetectionJson())
                 put("parameters", JSONObject().apply {
@@ -154,6 +159,7 @@ object AgentRepository {
                     put("enable_flexible", true)
                     put("enable_error_message", true)
                     put("enable_dump", true)
+//                    是否是多路声纹
 //                    put("cascading_graph", "v1_soseos_multi_user")
                     put("main", JSONObject().apply {
                         put("interrupt_check", JSONObject().apply {
@@ -183,31 +189,32 @@ object AgentRepository {
 //                            })
                         })
                     })
-                    put("main", JSONObject().apply {
-                        put("pre_register", JSONObject().apply {
-                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                            put("api_key", ConvoConfig.LLM_API_KEY)
-                            put("callback_timeout_seconds", 5.0)
-                            put("upload_result_timeout_seconds", 10.0)
-                            put("callback_max_retries", 5)
-                            put("temp_dir", "/tmp/convoai_pre_register")
-                        })
-                    })
-                    put("stt_uploader", JSONObject().apply {
-                        put("config", JSONObject().apply {
-                            put("enable", true)
-                            put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
-                            put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
-                            put("region", 0)
-                            put("vendor", 2)
-                            put("bucket", "ndt-public")
-                            put("fileNamePrefix", JSONArray().apply {
-                                put("shengwen")
-                                put("register")
+                    if (ConvoConfig.ENABLE_PRE_REGISTER) {
+                        put("main", JSONObject().apply {
+                            put("pre_register", JSONObject().apply {
+                                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                                put("api_key", ConvoConfig.LLM_API_KEY)
+                                put("callback_timeout_seconds", 5.0)
+                                put("upload_result_timeout_seconds", 10.0)
+                                put("callback_max_retries", 5)
+                                put("temp_dir", "/tmp/convoai_pre_register")
                             })
                         })
-                    })
-
+                        put("stt_uploader", JSONObject().apply {
+                            put("config", JSONObject().apply {
+                                put("enable", true)
+                                put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
+                                put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
+                                put("region", 0)
+                                put("vendor", 2)
+                                put("bucket", "ndt-public")
+                                put("fileNamePrefix", JSONArray().apply {
+                                    put("shengwen")
+                                    put("register")
+                                })
+                            })
+                        })
+                    }
                     if (ConvoConfig.USE_PRIVATE_ENV) {
                         put("rtc", JSONObject().apply {
                             put("domain_list", JSONArray().apply {
@@ -362,8 +369,9 @@ object AgentRepository {
         agentId: String, authToken: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val url = if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
-            else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
+            val url =
+                if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
+                else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
             val request =
                 Request.Builder().url(url).addHeader("Authorization", "agora token=$authToken")
                     .post("".toRequestBody(JSON_MEDIA_TYPE.toMediaType())).build()

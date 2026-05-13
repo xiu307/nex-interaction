@@ -13,6 +13,7 @@ import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
 import ai.conv.core.convoai.ConversationalAIAPI_VERSION
+import ai.conv.core.convoai.ConvoRtmCloudLog
 import ai.conv.core.convoai.ConversationalAIUtils
 import ai.conv.core.convoai.InterruptEvent
 import ai.conv.core.convoai.MessageType
@@ -162,10 +163,10 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
                 val rawString = rtmMessage.data as? String ?: return
                 messageMap = mMessageParser.parseJsonToMap(rawString)
             }
-            callMessagePrint(
-                TAG,
+            val rtmLine =
                 "<<< [onMessageEvent] publisherId:$publisherId, channelName:${event.channelName}, channelType:${event.channelType}, customType:${event.customType}, messageType:${rtmMessage.type} $messageMap "
-            )
+            callMessagePrint(TAG, rtmLine)
+            ConvoRtmCloudLog.d("[transcript-listener] $rtmLine")
             messageMap?.let { msgMap ->
                 try {
                     val agentUserId = publisherId

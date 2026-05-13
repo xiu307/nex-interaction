@@ -54,7 +54,10 @@ object ConvoConfig {
     const val PRIVATE_BASE_URL = "http://${GEELY_PRIVATE_IP}:9090/api/conversational-ai-agent/v2/projects"
     const val PUBLIC_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
 
-    const val STT_UPLOADER_KEY = ""
-    const val STT_UPLOADER_SECRET = ""
+    /** 阿里云 OSS 上传凭证；勿提交真实值，本地或 CI 注入 */
+    const val STT_UPLOADER_KEY: String = ""
+    const val STT_UPLOADER_SECRET: String = ""
+
+    const val ENABLE_PRE_REGISTER = true
 
 }

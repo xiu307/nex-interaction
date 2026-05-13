@@ -580,6 +580,7 @@ class AgentChatViewModel : ViewModel() {
             }
             currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
             joinedExUids.clear()
+//            加入多频道多声纹
             val successfulRemoteUids = mutableListOf(primaryRtcUid.toString())
             for (exUid in sessionUserIds.drop(1)) {
                 val exToken = connection.unifiedToken[exUid.toString()] ?: generateUserToken(exUid.toString())
