@@ -18,6 +18,15 @@ import ai.conv.core.convoai.subRender.IConversationTranscriptCallback
 import ai.conv.core.convoai.subRender.MessageParser
 import ai.conv.core.convoai.subRender.TranscriptController
 import ai.conv.core.convoai.subRender.TranscriptConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 /**
@@ -48,7 +57,15 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
     // Log tags for better debugging
     private companion object {
         private const val TAG = "[ConvoAPI]"
+        /** 宿主经 RTM 下发的声纹预注册结果（与 ConvoAI 信封字段 `object` 无关） */
+        private const val RTM_TYPE_VOICE_PRINT_REGISTER_STATUS = "VOICE_PRINT_REGISTER_STATUS"
+        /** 声纹预注册成功时，将 RTM payload.audioUrl 指向的 PCM 存为该文件名（含空格）。 */
+        private const val VOICE_PRINT_REGISTER_PCM_FILE_NAME = "person 1.pcm"
+
+        private val voicePrintHttpClient: OkHttpClient by lazy { OkHttpClient() }
     }
+
+    private val voicePrintRegisterScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var audioRouting = Constants.AUDIO_ROUTE_DEFAULT
 
@@ -73,6 +90,54 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
     private fun runOnMainThread(r: Runnable) {
         ConversationalAIUtils.runOnMainThread(r)
+    }
+
+    private fun parseVoicePrintRegisterPayload(msg: Map<String, Any>): Map<String, Any>? {
+        val raw = msg["payload"] ?: return null
+        if (raw is Map<*, *>) {
+            @Suppress("UNCHECKED_CAST")
+            return raw as? Map<String, Any>
+        }
+        if (raw is String) {
+            return mMessageParser.parseJsonToMap(raw)
+        }
+        return null
+    }
+
+    private fun scheduleDownloadVoicePrintRegisterPcm(audioUrl: String) {
+        val dir = config.voicePrintRegisterPcmOutputDir ?: return
+        voicePrintRegisterScope.launch {
+            try {
+                if (!dir.exists() && !dir.mkdirs()) {
+                    callMessagePrint(TAG, "[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] mkdir failed: $dir")
+                    return@launch
+                }
+                val outFile = File(dir, VOICE_PRINT_REGISTER_PCM_FILE_NAME)
+                val request = Request.Builder().url(audioUrl).get().build()
+                voicePrintHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        callMessagePrint(
+                            TAG,
+                            "[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] download failed http=${response.code} url=$audioUrl",
+                        )
+                        return@launch
+                    }
+                    val body = response.body ?: run {
+                        callMessagePrint(TAG, "[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] empty body url=$audioUrl")
+                        return@launch
+                    }
+                    body.byteStream().use { input ->
+                        FileOutputStream(outFile, false).use { output -> input.copyTo(output) }
+                    }
+                }
+                callMessagePrint(
+                    TAG,
+                    "[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] saved pcm -> ${outFile.absolutePath}",
+                )
+            } catch (e: Exception) {
+                callMessagePrint(TAG, "[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] save pcm error: ${e.message}")
+            }
+        }
     }
 
     private val covRtcHandler = object : IRtcEngineEventHandler() {
@@ -119,6 +184,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         }
 
         private fun dealMessageWithMap(publisherId: String, msg: Map<String, Any>) {
+            if (msg["type"] == RTM_TYPE_VOICE_PRINT_REGISTER_STATUS) {
+                logVoicePrintRegisterStatus(publisherId, msg)
+                return
+            }
             val transcriptObj = msg["object"] as? String ?: return
             val objectType = MessageType.fromValue(transcriptObj)
             when (objectType) {
@@ -229,6 +298,33 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 }
 
                 else -> return
+            }
+        }
+
+        /**
+         * 宿主下发的声纹预注册 RTM（顶层 `type` = [RTM_TYPE_VOICE_PRINT_REGISTER_STATUS]）。
+         * success 时 payload 含 `audioUrl`；failed 时通常仅有 `status`。
+         */
+        private fun logVoicePrintRegisterStatus(publisherId: String, msg: Map<String, Any>) {
+            val clientId = msg["clientId"]?.toString() ?: ""
+            val recordId = msg["recordId"]?.toString() ?: ""
+            val ts = msg["timestamp"]?.toString() ?: ""
+            val payload = this@ConversationalAIAPIImpl.parseVoicePrintRegisterPayload(msg)
+            val status = payload?.get("status")?.toString() ?: ""
+            val audioUrl = payload?.get("audioUrl")?.toString()?.takeIf { it.isNotBlank() }
+            val summary = buildString {
+                append("<<< [$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] from=$publisherId ")
+                append("clientId=$clientId recordId=$recordId timestamp=$ts status=$status")
+                if (audioUrl != null) append(" audioUrl=$audioUrl")
+            }
+            callMessagePrint(TAG, summary)
+            ConvoRtmCloudLog.d("[$RTM_TYPE_VOICE_PRINT_REGISTER_STATUS] $summary")
+            if (status.equals("success", ignoreCase = true) && audioUrl != null) {
+                this@ConversationalAIAPIImpl.scheduleDownloadVoicePrintRegisterPcm(audioUrl)
+                val sink = config.onVoicePrintRegisterPcmHttpUrl
+                if (sink != null) {
+                    runOnMainThread { sink.invoke(audioUrl) }
+                }
             }
         }
 
@@ -564,6 +660,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
     override fun destroy() {
         callMessagePrint(TAG, ">>> [destroy]")
+        voicePrintRegisterScope.cancel()
         config.rtcEngine.removeHandler(covRtcHandler)
         config.rtmClient.removeEventListener(covRtmMsgProxy)
         conversationalAIHandlerHelper.unSubscribeAll()

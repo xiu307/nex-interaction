@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.appcompat.app.AppCompatActivity
 import ai.conv.core.convoai.IConversationalAIAPIEventHandler
 import ai.conv.core.convoai.InterruptEvent
@@ -118,6 +120,9 @@ class AgentChatViewModel : ViewModel() {
     private var sessionUserIdsSnapshot: List<Int> = listOf(userId)
     private var joinedRemoteRtcUids: List<String> = listOf(userId.toString())
     private var joinInFlight: Boolean = false
+
+    /** 串行化 [startAgent] 与声纹预注册成功后的 stop+start，避免并发双启。 */
+    private val agentStartMutex = Mutex()
 
     private lateinit var manager: ConvoManager
     private val managerOrNull: ConvoManager?
@@ -251,7 +256,12 @@ class AgentChatViewModel : ViewModel() {
                     onAudioInputInterrupted = {
                         _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
                         addStatusLog("Audio input stopped unexpectedly")
-                    }
+                    },
+                    onVoicePrintRegisterPcmHttpUrl = { url ->
+                        BiometricSalRegistry.saveVoicePrintRegisterSalPcmUrl(url)
+                        addStatusLog("Voice print SAL PCM URL saved (key=${BiometricSalRegistry.VOICE_PRINT_SAL_SAMPLE_KEY})")
+                        scheduleRestartAgentAfterVoicePrintSal()
+                    },
                 ),
                 rtcEventSink = rtcEventSink,
                 rtmEventSink = rtmEventSink,
@@ -405,48 +415,90 @@ class AgentChatViewModel : ViewModel() {
      */
     fun startAgent() {
         viewModelScope.launch {
-            if (agentSession.agentId != null) {
-                Log.d(TAG, "Agent already started, agentId: ${agentSession.agentId}")
-                addStatusLog("Agent already started, agentId=${agentSession.agentId}")
-                return@launch
-            }
-            val sessionUserIds = sessionUserIdsSnapshot.ifEmpty { listOf(userId) }
-            currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
-            val runtimeSalSampleUrls = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
-            val hasIncompleteLocalRegistration =
-                BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
-            val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
-                channelName = connection.channelName,
-                agentRtcUid = currentAgentUid.toString(),
-                labelUserId = ConversationSessionIdentity.userId.toLong(),
-                remoteRtcUids = joinedRemoteRtcUids,
-                runtimeSalSampleUrls = runtimeSalSampleUrls,
-                hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
-            )
-            startResult.fold(
-                onSuccess = { outcome ->
-                    agentSession.agentId = outcome.agentId
-                    agentSession.authToken = outcome.channelScopedToken
-                    addStatusLog("Generate channel token & start agent OK")
-                    if (!startAudioInputInternal()) {
-                        addStatusLog("Enable audio input failed")
-                    }
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Connected
-                    )
-                    addStatusLog("Agent start successfully, agentId=${outcome.agentId}")
-                    Log.d(TAG, "Agent started successfully, agentId: ${outcome.agentId}")
-                    Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
-                },
-                onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
-                    addStatusLog("Agent start failed")
-                    Log.e(TAG, "startRemoteAgent failed: ${exception.message}", exception)
+            agentStartMutex.withLock {
+                if (agentSession.agentId != null) {
+                    Log.d(TAG, "Agent already started, agentId: ${agentSession.agentId}")
+                    addStatusLog("Agent already started, agentId=${agentSession.agentId}")
+                    return@withLock
                 }
-            )
+                runStartAgentOnceLocked()
+            }
         }
+    }
+
+    /**
+     * 声纹预注册 RTM 成功并写入本地 URL 后：若当前已起 Agent，则 stop 再 start，使 `sample_urls` 立即生效（无需用户手动重进）。
+     * 与 [startAgent] 共用 [agentStartMutex]，避免与首次启动并发。
+     */
+    private fun scheduleRestartAgentAfterVoicePrintSal() {
+        viewModelScope.launch {
+            agentStartMutex.withLock {
+                if (_uiState.value.connectionState != ConnectionState.Connected) {
+                    addStatusLog("Voice print SAL: not connected, URL saved for next session")
+                    return@withLock
+                }
+                if (managerOrNull == null) return@withLock
+                val aid = agentSession.agentId
+                if (aid == null) {
+                    addStatusLog("Voice print SAL: URL saved; first agent start will use sample_urls")
+                    return@withLock
+                }
+                val auth = agentSession.authToken
+                addStatusLog("Voice print SAL: stopping agent to apply sample_urls…")
+                ConversationAgentRestCoordinator.stopRemoteAgentIfStarted(aid, auth).fold(
+                    onSuccess = {
+                        agentSession.clearAgentRestFields()
+                        addStatusLog("Voice print SAL: stop OK, restarting agent…")
+                        Log.i(TAG, "Voice print SAL: agent restarted after VOICE_PRINT_REGISTER_STATUS success")
+                        runStartAgentOnceLocked()
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Voice print SAL: stop agent failed: ${e.message}", e)
+                        addStatusLog("Voice print SAL: stop failed, not restarting: ${e.message}")
+                    },
+                )
+            }
+        }
+    }
+
+    /** 在已持有 [agentStartMutex] 且 [agentSession.agentId] 为 null 时调用。 */
+    private suspend fun runStartAgentOnceLocked() {
+        val sessionUserIds = sessionUserIdsSnapshot.ifEmpty { listOf(userId) }
+        currentAgentUid = ConversationSessionIdentity.generateAgentUid(sessionUserIds.toSet())
+        val runtimeSalSampleUrls = BiometricSalRegistry.getRuntimeSalSampleUrlsForAgent()
+        val hasIncompleteLocalRegistration =
+            BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
+        val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
+            channelName = connection.channelName,
+            agentRtcUid = currentAgentUid.toString(),
+            labelUserId = ConversationSessionIdentity.userId.toLong(),
+            remoteRtcUids = joinedRemoteRtcUids,
+            runtimeSalSampleUrls = runtimeSalSampleUrls,
+            hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+        )
+        startResult.fold(
+            onSuccess = { outcome ->
+                agentSession.agentId = outcome.agentId
+                agentSession.authToken = outcome.channelScopedToken
+                addStatusLog("Generate channel token & start agent OK")
+                if (!startAudioInputInternal()) {
+                    addStatusLog("Enable audio input failed")
+                }
+                _uiState.value = _uiState.value.copy(
+                    connectionState = ConnectionState.Connected
+                )
+                addStatusLog("Agent start successfully, agentId=${outcome.agentId}")
+                Log.d(TAG, "Agent started successfully, agentId: ${outcome.agentId}")
+                Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
+            },
+            onFailure = { exception ->
+                _uiState.value = _uiState.value.copy(
+                    connectionState = ConnectionState.Error
+                )
+                addStatusLog("Agent start failed")
+                Log.e(TAG, "startRemoteAgent failed: ${exception.message}", exception)
+            },
+        )
     }
 
     /**
@@ -511,9 +563,9 @@ class AgentChatViewModel : ViewModel() {
 
     fun getRegisterSALNum(): Int {
         var num = 1
-        val registryComplete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
-        Log.i(TAG, "SAL: getCompleteSalFaceIdToPcmUrls size=${registryComplete.size} keys=${registryComplete.keys}")
-        // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）
+        val registryComplete = BiometricSalRegistry.getRuntimeSalSampleUrlsForAgent()
+        Log.i(TAG, "SAL: runtime sample_urls size=${registryComplete.size} keys=${registryComplete.keys}")
+        // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）+ 声纹预注册 URL（固定 key）
         for ((faceId, pcmUrl) in registryComplete) {
             if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
                 num++

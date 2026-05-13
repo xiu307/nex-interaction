@@ -15,8 +15,6 @@ import org.json.JSONObject
 object AgentRepository {
     private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
-    private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
-    private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
 
@@ -145,7 +143,6 @@ object AgentRepository {
                         put("sal_mode", "locking")
                         put(
                             "sample_urls", buildSalSampleUrlsJson(
-                                uidStr = labelUserIdStr,
                                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
                             )
@@ -185,9 +182,9 @@ object AgentRepository {
                         if (ConvoConfig.USE_PRIVATE_ENV) put("url", ConvoConfig.PRIVATE_BVC_URL)
                         put("params", JSONObject().apply {
                             put("vpBVC", JSONObject().apply {
-                                put("threshold_calc_low_lower_limit", 0.35)
-                                put("threshold_calc_low_upper_limit", 0.35)
-                                put("update_similarity_threshold_low", 0.35)
+                                put("threshold_calc_low_lower_limit", 0.4)
+                                put("threshold_calc_low_upper_limit", 0.4)
+                                put("update_similarity_threshold_low", 0.4)
                                 put("hop_size", 300)
                             })
 //                            put("asd", JSONObject().apply {
@@ -241,7 +238,6 @@ object AgentRepository {
     }
 
     private fun buildSalSampleUrlsJson(
-        uidStr: String,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {

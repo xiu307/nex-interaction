@@ -525,7 +525,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
 
         val totalUserNum = viewModel.getRegisterSALNum()
-        val runtimeSalSampleUrls = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
+        val runtimeSalSampleUrls = BiometricSalRegistry.getRuntimeSalSampleUrlsForAgent()
         val hasIncompleteLocalRegistration =
             BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
         val content = AgentRepository.buildStartAgentConfigPreview(

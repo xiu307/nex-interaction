@@ -3,6 +3,7 @@ package ai.conv.core.convoai
 import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtm.RtmClient
+import java.io.File
 
 const val ConversationalAIAPI_VERSION = "2.0.0"
 
@@ -530,6 +531,10 @@ enum class TranscriptStatus {
  * @property rtmClient RTM client instance for real-time messaging
  * @property renderMode Transcript rendering mode (Word or Text level)
  * @property enableLog Whether to enable logging (default: true). When set to true, logs will be written to the RTC SDK log file.
+ * @property voicePrintRegisterPcmOutputDir When non-null, successful `VOICE_PRINT_REGISTER_STATUS` RTM messages
+ *   with `payload.audioUrl` download PCM into this directory as `person 1.pcm`.
+ * @property onVoicePrintRegisterPcmHttpUrl Invoked on the main thread when `VOICE_PRINT_REGISTER_STATUS` succeeds
+ *   and `payload.audioUrl` is non-blank (http(s) PCM URL). Host may persist for the next agent `sample_urls`.
  */
 data class ConversationalAIAPIConfig(
     /** RTC engine instance for audio/video communication */
@@ -539,7 +544,11 @@ data class ConversationalAIAPIConfig(
     /** Transcript rendering mode, default is word-level */
     val renderMode: TranscriptRenderMode = TranscriptRenderMode.Word,
     /** Whether to enable logging, default is true. When true, logs will be written to the RTC SDK log file. */
-    val enableLog: Boolean = true
+    val enableLog: Boolean = true,
+    /** Directory for voice-print register PCM file; null disables automatic download. */
+    val voicePrintRegisterPcmOutputDir: File? = null,
+    /** Optional: persist successful voice-print register PCM URL for SAL `sample_urls`. */
+    val onVoicePrintRegisterPcmHttpUrl: ((String) -> Unit)? = null,
 )
 
 /**

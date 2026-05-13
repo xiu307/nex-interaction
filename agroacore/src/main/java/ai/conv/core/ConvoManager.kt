@@ -22,6 +22,7 @@ import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConfig
 import io.agora.rtm.RtmConstants.RtmServiceType
 import io.agora.rtm.RtmPrivateConfig
+import java.io.File
 import java.util.EnumSet
 
 
@@ -36,7 +37,10 @@ data class ConvoManagerConfig(
     val audioScenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT,
 
     /** 音频输入中断回调 */
-    val onAudioInputInterrupted: (() -> Unit)? = null
+    val onAudioInputInterrupted: (() -> Unit)? = null,
+
+    /** 声纹预注册 RTM 成功返回的 PCM http(s) URL，供宿主写入本地供下次 join 使用 */
+    val onVoicePrintRegisterPcmHttpUrl: ((String) -> Unit)? = null,
 )
 
 /**
@@ -121,11 +125,17 @@ class ConvoManager(
         rtmClient.addEventListener(rtmEventHandler)
 
         // 初始化 ConvoAI
+        val voicePrintPcmDir = File(
+            context.getExternalFilesDir(null) ?: context.filesDir,
+            "voice_print_register_pcm",
+        ).apply { mkdirs() }
         conversationalAIAPI = ConversationalAIAPIImpl(
             ConversationalAIAPIConfig(
                 rtcEngine = rtcEngine,
                 rtmClient = rtmClient,
-                enableLog = config.enableConvoAiLog
+                enableLog = config.enableConvoAiLog,
+                voicePrintRegisterPcmOutputDir = voicePrintPcmDir,
+                onVoicePrintRegisterPcmHttpUrl = config.onVoicePrintRegisterPcmHttpUrl,
             )
         )
         conversationalAIAPI.loadAudioSettings(config.audioScenario)

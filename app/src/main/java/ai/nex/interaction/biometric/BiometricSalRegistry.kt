@@ -31,12 +31,19 @@ object BiometricSalRegistry {
     const val FACE_IMAGE_URL_LOCAL_ONLY = "local://biometric-face"
     const val PCM_URL_LOCAL_ONLY = "local://biometric-pcm"
 
+    /**
+     * 声纹预注册 RTM（`VOICE_PRINT_REGISTER_STATUS`）成功后，与 join 请求里 SAL `sample_urls` 使用的固定 key。
+     */
+    const val VOICE_PRINT_SAL_SAMPLE_KEY = "123456"
+
     fun isHttpUrl(url: String?): Boolean = url?.startsWith("http", ignoreCase = true) == true
 
     private const val PREFS_NAME = "biometric_sal_prefs"
 
     private const val KEY_MAP = "biometric_sal_face_id_pcm_map"
-    private const val KEY_FACE_IMAGE_MAP = "biometric_sal_face_id_face_image_map"
+    private const val KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL = "voice_print_register_sal_pcm_url_v1"
+    /** 历史人脸 URL 独立 map；已废弃，仅 [clearAllRegistration] 等处移除残留。 */
+    private const val LEGACY_FACE_IMAGE_MAP_KEY = "biometric_sal_face_id_face_image_map"
     private const val KEY_REGISTRATION_SNAPSHOT = "biometric_registration_snapshot_v1"
     private const val KEY_REGISTRATION_SNAPSHOT_MAP = "biometric_registration_snapshot_map_v1"
     private const val KEY_FACE_ID_USER_ID_MAP = "biometric_face_id_user_id_map_v1"
@@ -122,23 +129,45 @@ object BiometricSalRegistry {
         prefs().edit()
             .putString(KEY_MAP, gson.toJson(map))
             .commit()
+        mergeRegistrationSnapshotForFaceId(faceIdKey, explicitPcm = pcmHttpUrl)
     }
 
     fun getSalSampleUrls(): Map<String, String> = loadMap()
 
+    /**
+     * 持久化 RTM 返回的声纹预注册 PCM **http(s)** URL，供下次 [getRuntimeSalSampleUrlsForAgent] 填入 `sample_urls`。
+     */
+    fun saveVoicePrintRegisterSalPcmUrl(httpUrl: String) {
+        val u = httpUrl.trim()
+        if (!isHttpUrl(u)) return
+        prefs().edit().putString(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL, u).commit()
+    }
+
+    fun getVoicePrintRegisterSalPcmUrl(): String? =
+        prefs().getString(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL, null)?.trim()?.takeIf { it.isNotEmpty() && isHttpUrl(it) }
+
+    /**
+     * 生物识别注册的 `faceId -> pcm` 与声纹预注册 URL（固定 key [VOICE_PRINT_SAL_SAMPLE_KEY]）合并结果。
+     * 后者覆盖同名 key，避免与旧数据冲突时语义不清。
+     */
+    fun getRuntimeSalSampleUrlsForAgent(): Map<String, String> {
+        val base = getCompleteSalFaceIdToPcmUrls().toMutableMap()
+        getVoicePrintRegisterSalPcmUrl()?.let { base[VOICE_PRINT_SAL_SAMPLE_KEY] = it }
+        return base
+    }
+
     fun getAllStoredPersonRows(): List<BiometricStoredPersonRow> {
         val pcmMap = loadMap()
-        val faceMap = loadFaceImageMap()
         val snapshotMap = loadRegistrationSnapshotMap()
         val legacySnap = getLegacyRegistrationSnapshot()
-        val keys = pcmMap.keys.union(faceMap.keys).toMutableSet()
+        val keys = pcmMap.keys.toMutableSet()
         keys.addAll(snapshotMap.keys.filter { it.isNotEmpty() })
         legacySnap?.faceId?.takeIf { it.isNotEmpty() }?.let { keys.add(it) }
         return keys.sorted().map { faceId ->
             val fromSnap = snapshotMap[faceId] ?: legacySnap?.takeIf { it.faceId == faceId }
             BiometricStoredPersonRow(
                 faceId = faceId,
-                faceImageOssUrl = faceMap[faceId] ?: fromSnap?.faceImageOssUrl,
+                faceImageOssUrl = fromSnap?.faceImageOssUrl,
                 pcmOssUrl = pcmMap[faceId] ?: fromSnap?.pcmOssUrl,
             )
         }
@@ -148,14 +177,15 @@ object BiometricSalRegistry {
      * SAL `sample_urls` 仅要求 PCM 为 **http(s)**；face URL 只要有值即可（允许 `local://`）。
      */
     fun getCompleteSalFaceIdToPcmUrls(): Map<String, String> {
+        //        return mapOf("234" to "https://ndt-public.oss-cn-hangzhou.aliyuncs.com/shengwen/register/A42AF49EA44CH63HD55MP64RV46YJ27H_acb438e8-020a-4791-8e7d-9d8c030ff160_1778325951461.pcm"  )
         val pcmMap = loadMap()
-        val faceMap = loadFaceImageMap()
-        val keys = pcmMap.keys.union(faceMap.keys)
+        val keys = pcmMap.keys.toMutableSet()
+        keys.addAll(loadRegistrationSnapshotMap().keys)
         return buildMap {
             for (faceId in keys) {
                 if (faceId.isEmpty()) continue
                 val pcm = pcmMap[faceId]?.trim().orEmpty()
-                val faceImg = faceMap[faceId]?.trim().orEmpty()
+                val faceImg = getFaceImageHttpUrl(faceId)?.trim().orEmpty()
                 if (pcm.isNotEmpty() && faceImg.isNotEmpty() && isHttpUrl(pcm)) {
                     put(faceId, pcm)
                 }
@@ -168,17 +198,14 @@ object BiometricSalRegistry {
      */
     fun replaceAllRegistrationDataWithSingleFaceId(faceId: String) {
         if (faceId.isEmpty()) return
-        val fm = loadFaceImageMap()
         val pm = loadMap()
         val sm = loadRegistrationSnapshotMap()
-        val faceUrl = fm[faceId]
         val pcmUrl = pm[faceId]
         val snap = sm[faceId]
-        val newFace = if (faceUrl != null) mapOf(faceId to faceUrl) else emptyMap()
         val newPcm = if (pcmUrl != null) mapOf(faceId to pcmUrl) else emptyMap()
         val newSnap = if (snap != null) mapOf(faceId to snap) else emptyMap()
         val e = prefs().edit()
-        e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(newFace))
+        e.remove(LEGACY_FACE_IMAGE_MAP_KEY)
         e.putString(KEY_MAP, gson.toJson(newPcm))
         e.putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(newSnap))
         if (snap == null) {
@@ -199,12 +226,12 @@ object BiometricSalRegistry {
         val complete = getCompleteSalFaceIdToPcmUrls()
         if (complete.isNotEmpty()) return false
         val pcmMap = loadMap()
-        val faceMap = loadFaceImageMap()
-        val keys = pcmMap.keys.union(faceMap.keys)
+        val keys = pcmMap.keys.toMutableSet()
+        keys.addAll(loadRegistrationSnapshotMap().keys)
         return keys.any { fid ->
             if (fid.isEmpty()) return@any false
             val pcm = pcmMap[fid]?.trim().orEmpty()
-            val faceImg = faceMap[fid]?.trim().orEmpty()
+            val faceImg = getFaceImageHttpUrl(fid)?.trim().orEmpty()
             val hasAny = pcm.isNotEmpty() || faceImg.isNotEmpty()
             val salReadyByNewRule = pcm.isNotEmpty() && faceImg.isNotEmpty() && isHttpUrl(pcm)
             hasAny && !salReadyByNewRule
@@ -220,6 +247,7 @@ object BiometricSalRegistry {
         prefs().edit()
             .putString(KEY_MAP, gson.toJson(map))
             .commit()
+        mergeRegistrationSnapshotForFaceId(faceIdKey, explicitPcm = "")
     }
 
     fun getLastRegisteredPcmHttpUrl(): String? =
@@ -227,27 +255,46 @@ object BiometricSalRegistry {
 
     /** 仅写入人脸图映射 URL（http 或 local:// 占位），不持久化本地文件路径。 */
     fun saveFaceIdToFaceImageUrl(faceIdKey: String, imageHttpUrl: String) {
-        val map = loadFaceImageMap().toMutableMap()
-        map[faceIdKey] = imageHttpUrl
-        prefs().edit()
-            .putString(KEY_FACE_IMAGE_MAP, gson.toJson(map))
-            .commit()
+        mergeRegistrationSnapshotForFaceId(faceIdKey, faceOverride = imageHttpUrl)
     }
 
-    fun getFaceImageHttpUrl(faceIdKey: String): String? = loadFaceImageMap()[faceIdKey]
+    fun getFaceImageHttpUrl(faceIdKey: String): String? =
+        getRegistrationSnapshotForFaceId(faceIdKey)?.faceImageOssUrl?.takeIf { it.isNotEmpty() }
 
     fun getLastRegisteredFaceImageUrl(): String? =
         getLastRegisteredFaceId()?.let { getFaceImageHttpUrl(it) }
 
-    private fun loadFaceImageMap(): Map<String, String> {
-        val json = prefs().getString(KEY_FACE_IMAGE_MAP, "") ?: ""
-        if (json.isEmpty()) return emptyMap()
-        return try {
-            val type = object : TypeToken<Map<String, String>>() {}.type
-            gson.fromJson<Map<String, String>>(json, type) ?: emptyMap()
-        } catch (_: Exception) {
-            emptyMap()
+    /**
+     * 将人脸图 / PCM URL 合并写入注册快照（单 faceId 一条），不再使用独立的人脸 URL map。
+     *
+     * @param explicitPcm 非 null 时直接作为快照中的 PCM 字段（可为 `""`）；null 则从 [loadMap] / 旧快照推断。
+     */
+    private fun mergeRegistrationSnapshotForFaceId(
+        faceIdKey: String,
+        faceOverride: String? = null,
+        explicitPcm: String? = null,
+    ) {
+        if (faceIdKey.isEmpty()) return
+        val sm = loadRegistrationSnapshotMap().toMutableMap()
+        val prev = sm[faceIdKey] ?: getLegacyRegistrationSnapshot()?.takeIf { it.faceId == faceIdKey }
+        val face = faceOverride ?: prev?.faceImageOssUrl?.takeIf { it.isNotEmpty() } ?: ""
+        val pcm = if (explicitPcm != null) {
+            explicitPcm
+        } else {
+            loadMap()[faceIdKey].orEmpty().ifEmpty { prev?.pcmOssUrl ?: "" }
         }
+        val snap = BiometricRegistrationSnapshot(
+            faceId = faceIdKey,
+            faceImageOssUrl = face,
+            pcmOssUrl = pcm,
+            savedAtEpochMs = prev?.savedAtEpochMs ?: System.currentTimeMillis(),
+        )
+        sm[faceIdKey] = snap
+        val e = prefs().edit().putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(sm))
+        if (getLastRegisteredFaceId() == faceIdKey) {
+            e.putString(KEY_REGISTRATION_SNAPSHOT, gson.toJson(snap))
+        }
+        e.commit()
     }
 
     private fun loadMap(): Map<String, String> {
@@ -268,17 +315,14 @@ object BiometricSalRegistry {
      */
     fun removeRegistrationForFaceId(faceId: String) {
         if (faceId.isEmpty()) return
-        val faceMap = loadFaceImageMap().toMutableMap()
         val pcmMap = loadMap().toMutableMap()
         val snapshotMap = loadRegistrationSnapshotMap().toMutableMap()
         val faceToUser = loadFaceIdToUserIdMap().toMutableMap()
-        faceMap.remove(faceId)
         pcmMap.remove(faceId)
         snapshotMap.remove(faceId)
         val boundFaceIds = faceToUser.filterValues { it == faceId }.keys
         boundFaceIds.forEach { faceToUser.remove(it) }
         val e = prefs().edit()
-        e.putString(KEY_FACE_IMAGE_MAP, gson.toJson(faceMap))
         e.putString(KEY_MAP, gson.toJson(pcmMap))
         e.putString(KEY_REGISTRATION_SNAPSHOT_MAP, gson.toJson(snapshotMap))
         e.putString(KEY_FACE_ID_USER_ID_MAP, gson.toJson(faceToUser))
@@ -287,7 +331,7 @@ object BiometricSalRegistry {
             e.remove(KEY_REGISTRATION_SNAPSHOT)
         }
         if (getLastRegisteredFaceId() == faceId) {
-            val remaining = faceMap.keys.union(pcmMap.keys).filter { it.isNotEmpty() }.sorted().firstOrNull()
+            val remaining = snapshotMap.keys.union(pcmMap.keys).filter { it.isNotEmpty() }.sorted().firstOrNull()
             e.putString(KEY_LAST_REGISTERED_USER_ID, remaining ?: "")
         }
         e.commit()
@@ -307,7 +351,8 @@ object BiometricSalRegistry {
     fun clearAllRegistration() {
         val e = prefs().edit()
         e.remove(KEY_MAP)
-        e.remove(KEY_FACE_IMAGE_MAP)
+        e.remove(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL)
+        e.remove(LEGACY_FACE_IMAGE_MAP_KEY)
         e.remove(KEY_REGISTRATION_SNAPSHOT)
         e.remove(KEY_REGISTRATION_SNAPSHOT_MAP)
         e.remove(KEY_FACE_ID_USER_ID_MAP)
