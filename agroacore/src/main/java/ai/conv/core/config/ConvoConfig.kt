@@ -35,10 +35,6 @@ object ConvoConfig {
         """{"base_url": "http://${GEELY_PRIVATE_IP}:8080/v1", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "model": "gpt-4o-mini-tts", "voice": "coral", "instructions": "", "speed": 1.0}"""
     const val TTS_BYTEDANCE_APP_ID: String = ""
     const val TTS_BYTEDANCE_TOKEN: String = ""
-
-    const val SAL_ENABLE_PERSONALIZED: Boolean = false
-    const val SAL_PERSONALIZED_PCM_URL: String = ""
-    const val SAL_BIOMETRIC_SAMPLE_URLS: String = ""
     @JvmField
     var SAL_LAB_PCM_URL_SPEAKER1: String =
         "https://voiceprint-labtest.agoralab.co/lab_qn_m1.pcm"
@@ -57,7 +53,4 @@ object ConvoConfig {
     /** 阿里云 OSS 上传凭证；勿提交真实值，本地或 CI 注入 */
     const val STT_UPLOADER_KEY: String = ""
     const val STT_UPLOADER_SECRET: String = ""
-
-    const val ENABLE_PRE_REGISTER = true
-
 }

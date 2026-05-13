@@ -511,24 +511,8 @@ class AgentChatViewModel : ViewModel() {
 
     fun getRegisterSALNum(): Int {
         var num = 1
-        val rawBiometric = KeyCenter.SAL_BIOMETRIC_SAMPLE_URLS
-        val biometricJson = try {
-            if (rawBiometric.isNotEmpty()) JSONObject(rawBiometric) else JSONObject()
-        } catch (_: Exception) {
-            JSONObject()
-        }
         val registryComplete = BiometricSalRegistry.getCompleteSalFaceIdToPcmUrls()
         Log.i(TAG, "SAL: getCompleteSalFaceIdToPcmUrls size=${registryComplete.size} keys=${registryComplete.keys}")
-
-        if (KeyCenter.SAL_ENABLE_PERSONALIZED) {
-            KeyCenter.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }?.let { num++ }
-        }
-        val keyIt = biometricJson.keys()
-        while (keyIt.hasNext()) {
-            val key = keyIt.next()
-            val v = biometricJson.optString(key, "")
-            if (key.isNotEmpty() && v.isNotEmpty()) num++
-        }
         // 本地注册页完成的 faceId→PCM（PCM 需 http(s)，face URL 仅需非空）
         for ((faceId, pcmUrl) in registryComplete) {
             if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {

@@ -140,12 +140,11 @@ object AgentRepository {
                 put("llm", buildLlmJson(labelUserId))
                 put("tts", buildTtsJson())
                 put("sal", JSONObject().apply {
-                    if (ConvoConfig.ENABLE_PRE_REGISTER)  put("sal_mode", "pre_register")
+                    if (runtimeSalSampleUrls.isEmpty())  put("sal_mode", "pre_register")
                     else {
                         put("sal_mode", "locking")
                         put(
                             "sample_urls", buildSalSampleUrlsJson(
-                                enablePersonalized = ConvoConfig.SAL_ENABLE_PERSONALIZED,
                                 uidStr = labelUserIdStr,
                                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
@@ -189,32 +188,30 @@ object AgentRepository {
 //                            })
                         })
                     })
-                    if (ConvoConfig.ENABLE_PRE_REGISTER) {
-                        put("main", JSONObject().apply {
-                            put("pre_register", JSONObject().apply {
-                                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                                put("api_key", ConvoConfig.LLM_API_KEY)
-                                put("callback_timeout_seconds", 5.0)
-                                put("upload_result_timeout_seconds", 10.0)
-                                put("callback_max_retries", 5)
-                                put("temp_dir", "/tmp/convoai_pre_register")
+                    put("main", JSONObject().apply {
+                        put("pre_register", JSONObject().apply {
+                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                            put("api_key", ConvoConfig.LLM_API_KEY)
+                            put("callback_timeout_seconds", 5.0)
+                            put("upload_result_timeout_seconds", 10.0)
+                            put("callback_max_retries", 5)
+                            put("temp_dir", "/tmp/convoai_pre_register")
+                        })
+                    })
+                    put("stt_uploader", JSONObject().apply {
+                        put("config", JSONObject().apply {
+                            put("enable", true)
+                            put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
+                            put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
+                            put("region", 0)
+                            put("vendor", 2)
+                            put("bucket", "ndt-public")
+                            put("fileNamePrefix", JSONArray().apply {
+                                put("shengwen")
+                                put("register")
                             })
                         })
-                        put("stt_uploader", JSONObject().apply {
-                            put("config", JSONObject().apply {
-                                put("enable", true)
-                                put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
-                                put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
-                                put("region", 0)
-                                put("vendor", 2)
-                                put("bucket", "ndt-public")
-                                put("fileNamePrefix", JSONArray().apply {
-                                    put("shengwen")
-                                    put("register")
-                                })
-                            })
-                        })
-                    }
+                    })
                     if (ConvoConfig.USE_PRIVATE_ENV) {
                         put("rtc", JSONObject().apply {
                             put("domain_list", JSONArray().apply {
@@ -236,21 +233,10 @@ object AgentRepository {
     }
 
     private fun buildSalSampleUrlsJson(
-        enablePersonalized: Boolean,
         uidStr: String,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {
-        val biometricJson = try {
-            if (ConvoConfig.SAL_BIOMETRIC_SAMPLE_URLS.isNotEmpty()) {
-                JSONObject(ConvoConfig.SAL_BIOMETRIC_SAMPLE_URLS)
-            } else {
-                JSONObject()
-            }
-        } catch (_: Exception) {
-            JSONObject()
-        }
-
         Log.i(
             TAG,
             "SAL: runtime sample_urls size=${runtimeSalSampleUrls.size} keys=${runtimeSalSampleUrls.keys}"
@@ -262,35 +248,13 @@ object AgentRepository {
             )
         }
 
-        val hasBiometricEntries = biometricJson.keys().asSequence().any { key ->
-            key.isNotEmpty() && biometricJson.optString(key, "").isNotEmpty()
-        } || runtimeSalSampleUrls.isNotEmpty()
-
         val out = JSONObject()
-        if (enablePersonalized) {
-            ConvoConfig.SAL_PERSONALIZED_PCM_URL.takeIf { it.isNotEmpty() }
-                ?.let { out.put(uidStr, it) }
-        }
-
-        val envKeys = biometricJson.keys()
-        while (envKeys.hasNext()) {
-            val key = envKeys.next()
-            val value = biometricJson.optString(key, "")
-            if (key.isNotEmpty() && value.isNotEmpty()) {
-                out.put(key, value)
-            }
-        }
-
         runtimeSalSampleUrls.forEach { (faceId, pcmUrl) ->
             if (faceId.isNotEmpty() && pcmUrl.isNotEmpty()) {
                 out.put(faceId, pcmUrl)
             }
         }
 
-        if (!hasBiometricEntries) {
-            out.put(SAL_LAB_SPEAKER1_ID, ConvoConfig.SAL_LAB_PCM_URL_SPEAKER1)
-            out.put(SAL_LAB_SPEAKER2_ID, ConvoConfig.SAL_LAB_PCM_URL_SPEAKER2)
-        }
         return out
     }
 

@@ -28,9 +28,6 @@ object KeyCenter {
     val TTS_BYTEDANCE_TOKEN: String = ConvoConfig.TTS_BYTEDANCE_TOKEN
 
     /** SAL：与场景工程 buildSalSampleUrls 一致，由 env 配置个性化声纹与预注册 faceId→PCM */
-    val SAL_ENABLE_PERSONALIZED: Boolean = ConvoConfig.SAL_ENABLE_PERSONALIZED
-    val SAL_PERSONALIZED_PCM_URL: String = ConvoConfig.SAL_PERSONALIZED_PCM_URL
-    val SAL_BIOMETRIC_SAMPLE_URLS: String = ConvoConfig.SAL_BIOMETRIC_SAMPLE_URLS
 
     /** 运行时 STS 地址继续由 app 自身 BuildConfig 持有，不放进 SDK。 */
     val OSS_STS_TOKEN_URL: String = BuildConfig.OSS_STS_TOKEN_URL
