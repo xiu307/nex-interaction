@@ -36,10 +36,13 @@ data class ConvoManagerConfig(
     /** 音频场景 */
     val audioScenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT,
 
+    /** 是否为眼镜场景,会动态修改 ConvoConfig.IS_GLASS_SCENARIO */
+    val isGlassScenario: Boolean = false,
+
     /** 音频输入中断回调 */
     val onAudioInputInterrupted: (() -> Unit)? = null,
 
-    /** 声纹预注册 RTM 成功返回的 PCM http(s) URL，供宿主写入本地供下次 join 使用 */
+    /** 声纹预注册 RTM 成功返回的 PCM http(s) URL,供宿主写入本地供下次 join 使用 */
     val onVoicePrintRegisterPcmHttpUrl: ((String) -> Unit)? = null,
 )
 
@@ -101,6 +104,9 @@ class ConvoManager(
         RtmEventHandler(logTag, rtmEventSink)
 
     init {
+        // 通过 ConvoManagerConfig 动态修改 ConvoConfig.IS_GLASS_SCENARIO
+        ConvoConfig.IS_GLASS_SCENARIO = config.isGlassScenario
+
         rtcEngine = initRtcEngine(context, appId, rtcEventHandler)
         if (ConvoConfig.USE_PRIVATE_ENV) {
             val localConfig = LocalAccessPointConfiguration()

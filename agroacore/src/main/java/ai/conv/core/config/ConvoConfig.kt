@@ -17,6 +17,10 @@ object ConvoConfig {
 
     const val USE_PRIVATE_ENV: Boolean = false
 
+    /** 是否为眼镜场景,默认 false,可通过 ConvoManagerConfig 动态修改 */
+    @JvmField
+    var IS_GLASS_SCENARIO: Boolean = false
+
     const val LLM_API_KEY: String = "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn"
     const val LLM_URL: String = "http://${GEELY_PRIVATE_IP}:8080/chat/completions"
     const val LLM_MODEL: String = "qwen-plus"
@@ -59,4 +63,6 @@ object ConvoConfig {
     /** 阿里云 OSS 上传凭证；勿提交真实值，本地或 CI 注入 */
     const val STT_UPLOADER_KEY: String = ""
     const val STT_UPLOADER_SECRET: String = ""
+
+
 }
