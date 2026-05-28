@@ -15,6 +15,8 @@ import org.json.JSONObject
 object AgentRepository {
     private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
+    private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
+    private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
 
@@ -143,6 +145,7 @@ object AgentRepository {
                         put("sal_mode", "locking")
                         put(
                             "sample_urls", buildSalSampleUrlsJson(
+                                uidStr = labelUserIdStr,
                                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
                             )
@@ -226,6 +229,7 @@ object AgentRepository {
     }
 
     private fun buildSalSampleUrlsJson(
+        uidStr: String,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {

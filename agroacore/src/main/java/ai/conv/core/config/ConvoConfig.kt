@@ -26,9 +26,8 @@ object ConvoConfig {
     const val LLM_MAX_HISTORY: String = "21"
 
     const val ASR_LANG: String = "zh-CN"
-    const val ASR_VENDOR: String = "openai"
-    val ASR_PARAMS: String =
-        """{"base_url": "ws://${GEELY_PRIVATE_IP}:8080/realtime?intent=transcription", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "access_key": "", "app_key": "", "resource_id": ""}"""
+    const val ASR_VENDOR: String = "fengming"
+    val ASR_PARAMS: String = ""
 
     const val TTS_VENDOR: String = "openai"
     val TTS_PARAMS: String =
@@ -46,6 +45,13 @@ object ConvoConfig {
     const val PRE_REG_CALLBACK_URL: String = "http://${GEELY_PRIVATE_IP}:8080/v1/voice_print/register_status"
 
     const val PRIVATE_BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
+    //注意Speaker IDs要与rtc_user_id保持一致
+    @JvmField
+    var SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_wxy"
+    @JvmField
+    var SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
+
+    const val BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
     const val PRIVATE_DOMAIN_LIST = "ap.1405669.agora.local"
     const val PRIVATE_BASE_URL = "http://${GEELY_PRIVATE_IP}:9090/api/conversational-ai-agent/v2/projects"
     const val PUBLIC_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"

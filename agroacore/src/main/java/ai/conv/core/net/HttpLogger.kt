@@ -1,6 +1,7 @@
 package ai.conv.core.net
 
 import ai.conv.BuildConfig
+import ai.conv.core.convoai.ConvoRtmCloudLog
 import android.util.Log
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
@@ -65,9 +66,11 @@ class HttpLogger : Interceptor {
         val logResultOnly = shouldLogResultOnly(request)
 
         if (!shouldSkipCompletely && !logResultOnly) {
-            Log.d("[$requestId]-Request", buildLogContent(request))
+            ConvoRtmCloudLog.d("[$requestId]-Request"+ buildLogContent(request))
+           // Log.d("[$requestId]-Request", buildLogContent(request))
         } else if (logResultOnly) {
-            Log.d("[$requestId]-Request", "Large file upload request: ${request.method} ${request.url}")
+            ConvoRtmCloudLog.d("[$requestId]-Request"+"Large file upload request: ${request.method} ${request.url}")
+            //Log.d("[$requestId]-Request", "Large file upload request: ${request.method} ${request.url}")
         }
 
         val startNs = System.nanoTime()

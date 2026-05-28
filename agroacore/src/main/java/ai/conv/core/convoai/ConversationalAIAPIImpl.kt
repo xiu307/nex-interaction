@@ -18,6 +18,7 @@ import ai.conv.core.convoai.subRender.IConversationTranscriptCallback
 import ai.conv.core.convoai.subRender.MessageParser
 import ai.conv.core.convoai.subRender.TranscriptController
 import ai.conv.core.convoai.subRender.TranscriptConfig
+import android.view.animation.AnticipateInterpolator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -177,6 +178,9 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 callMessagePrint(TAG, "<<< [onMessageEvent][raw] from=$from payload=$rawString")
                 ConvoRtmCloudLog.d("[onMessageEvent][raw] from=$from payload=$rawString")
                 val messageMap = mMessageParser.parseJsonToMap(rawString)
+                event.publisherId?.takeIf { it == "geely_rtm_server" }?.let { publisherId ->
+                    dealGeelyMessageWithMap(messageMap ?: emptyMap())
+                }
                 messageMap?.let { map ->
                     dealMessageWithMap(event.publisherId ?: "", map)
                 }
@@ -326,6 +330,12 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                     runOnMainThread { sink.invoke(audioUrl) }
                 }
             }
+        }
+
+  private fun dealGeelyMessageWithMap(msg:Map<String , Any>){
+                conversationalAIHandlerHelper.notifyEventHandlers {
+                    it.onGeelyRtmMessage(msg)
+                }
         }
 
         /**
@@ -485,6 +495,14 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             is ImageMessage -> {
                 sendImage(agentUserId, message, completion)
             }
+
+            is LocationMessage -> {
+                sendLocation(agentUserId, message, completion)
+            }
+            is AiImageMessage -> {
+                //Ai识图专用
+                sendAiImage(agentUserId, message, completion)
+            }
         }
 
     }
@@ -606,6 +624,116 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         }
     }
 
+    private fun sendLocation(agentUserId: String, message: LocationMessage, completion: (ConversationalAIAPIError?) -> Unit) {
+        val traceId = genTraceId
+        callMessagePrint(
+            TAG,
+            ">>> [traceId:$traceId] [sendLocation] $agentUserId lon=${message.longitude} lat=${message.latitude}"
+        )
+
+        // 构建位置数据 payload
+        val locationPayload = mutableMapOf<String, Any>().apply {
+            put("clientId", message.clientId)
+            put("recordId", message.recordId)
+            put("type", "GLASS_CLIENT_INFO_UP")
+            put("timestamp", System.currentTimeMillis().toString())
+            put("payload", mutableMapOf<String, String>().apply {
+                put("longitude", message.longitude)
+                put("latitude", message.latitude)
+            })
+        }
+
+        try {
+            // Convert to JSON string
+            val jsonMessage = JSONObject(locationPayload as Map<*, *>?).toString()
+
+            // Set publish options
+            val options = PublishOptions().apply {
+                setChannelType(RtmConstants.RtmChannelType.USER)   // Set to user channel type for point-to-point messages
+                customType = "location.upload"     // Custom message type
+            }
+
+            callMessagePrint(TAG, "[traceId:$traceId] rtm publish $jsonMessage")
+            // Send RTM point-to-point message
+            config.rtmClient.publish(
+                agentUserId, jsonMessage, options,
+                object : ResultCallback<Void> {
+                    override fun onSuccess(responseInfo: Void?) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onSuccess")
+                        runOnMainThread {
+                            completion.invoke(null)
+                        }
+                    }
+
+                    override fun onFailure(errorInfo: ErrorInfo) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}")
+                        runOnMainThread {
+                            val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
+                            completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                        }
+                    }
+                })
+        } catch (e: Exception) {
+            callMessagePrint(TAG, "[traceId:$traceId] [!] ${e.message}")
+            runOnMainThread {
+                completion.invoke(ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}"))
+            }
+        }
+    }
+
+    private fun sendAiImage(agentUserId: String, message: AiImageMessage, completion: (ConversationalAIAPIError?) -> Unit) {
+        val traceId = genTraceId
+
+        // 构建位置数据 payload
+        val locationPayload = mutableMapOf<String, Any>().apply {
+            put("clientId", message.clientId)
+            put("recordId", message.recordId)
+            put("type", message.type)
+            put("timestamp", System.currentTimeMillis().toString())
+            put("payload", mutableMapOf<String, String>().apply {
+                put("imageUrl", message.imageUrl)
+            })
+        }
+
+        try {
+            // Convert to JSON string
+            val jsonMessage = JSONObject(locationPayload as Map<*, *>?).toString()
+
+            // Set publish options
+            val options = PublishOptions().apply {
+                setChannelType(RtmConstants.RtmChannelType.USER)   // Set to user channel type for point-to-point messages
+            }
+
+            callMessagePrint(TAG, "[traceId:$traceId] rtm publish AI 识图 \n" +
+                    "channelName:$agentUserId \n" +
+                    "jsonMessage:$jsonMessage \n" +
+                    "options:${options.toString()} \n")
+            // Send RTM point-to-point message
+            config.rtmClient.publish(
+                agentUserId, jsonMessage, options,
+                object : ResultCallback<Void> {
+                    override fun onSuccess(responseInfo: Void?) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onSuccess")
+                        runOnMainThread {
+                            completion.invoke(null)
+                        }
+                    }
+
+                    override fun onFailure(errorInfo: ErrorInfo) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}")
+                        runOnMainThread {
+                            val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
+                            completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                        }
+                    }
+                })
+        } catch (e: Exception) {
+            callMessagePrint(TAG, "[traceId:$traceId] [!] ${e.message}")
+            runOnMainThread {
+                completion.invoke(ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}"))
+            }
+        }
+    }
     override fun interrupt(agentUserId: String, completion: (error: ConversationalAIAPIError?) -> Unit) {
         val traceId = genTraceId
         callMessagePrint(TAG, ">>> [traceId:$traceId] [interrupt] $agentUserId")
