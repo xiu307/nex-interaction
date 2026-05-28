@@ -193,9 +193,10 @@ object AgentRepository {
                             put("vobvcDelay", 10)
                             put("vpbvcDelay", 10)
                             put("vpBVC", JSONObject().apply {
-                                put("threshold_calc_low_lower_limit", 0.45)
-                                put("threshold_calc_low_upper_limit", 0.45)
-                                put("update_similarity_threshold_low", 0.45)
+                                val threshold = if (ConvoConfig.IS_GLASS_SCENARIO) 0.3 else 0.45
+                                put("threshold_calc_low_lower_limit", threshold)
+                                put("threshold_calc_low_upper_limit", threshold)
+                                put("update_similarity_threshold_low", threshold)
                                 put("hop_size", 300)
                             })
                         })

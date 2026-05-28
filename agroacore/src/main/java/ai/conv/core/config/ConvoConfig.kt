@@ -17,7 +17,7 @@ object ConvoConfig {
 
     const val USE_PRIVATE_ENV: Boolean = false
 
-    /** 是否为眼镜场景,默认 false,可通过 ConvoManagerConfig 动态修改 */
+    /** 是否为眼镜场景,默认 false非眼镜业务场景,可通过 ConvoManagerConfig 动态修改 */
     @JvmField
     var IS_GLASS_SCENARIO: Boolean = false
 
