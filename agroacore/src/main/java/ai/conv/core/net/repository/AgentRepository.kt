@@ -166,7 +166,13 @@ object AgentRepository {
                             put("timeout_seconds", 5)
                             put("url", ConvoConfig.INTERRUPT_CHECK_URL)
                             put("api_key", ConvoConfig.LLM_API_KEY)
-                            put("labels", JSONObject().put("userName", labelUserIdStr))
+                            put("labels", JSONObject()
+                                .put("userName", labelUserIdStr)
+                                .apply {
+                                    if (ConvoConfig.IS_GLASS_SCENARIO) {
+                                        put("channelCode", "1_jowneyTestDevice")
+                                    }
+                                })
                         })
                         put("pre_register", JSONObject().apply {
                             put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
@@ -297,9 +303,21 @@ object AgentRepository {
     private fun buildLlmParamsJson(userNameForLabels: Long): JSONObject = try {
         val base =
             if (ConvoConfig.LLM_PARRAMS.isNotEmpty()) JSONObject(ConvoConfig.LLM_PARRAMS) else JSONObject()
-        base.put("lables", JSONObject().put("userName", userNameForLabels))
+        base.put("lables", JSONObject().apply {
+            put("userName", userNameForLabels)
+            if (ConvoConfig.IS_GLASS_SCENARIO) {
+                put("channelCode", "1_jowneyTestDevice")
+            }
+        })
     } catch (_: Exception) {
-        JSONObject().put("lables", JSONObject().put("userName", userNameForLabels))
+        JSONObject().apply {
+            put("lables", JSONObject().apply {
+                put("userName", userNameForLabels)
+                if (ConvoConfig.IS_GLASS_SCENARIO) {
+                    put("channelCode", "1_jowneyTestDevice")
+                }
+            })
+        }
     }
 
     private fun buildTtsJson(): JSONObject = JSONObject().apply {
