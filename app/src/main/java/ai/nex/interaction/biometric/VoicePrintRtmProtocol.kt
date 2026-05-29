@@ -1,7 +1,6 @@
 package ai.nex.interaction.biometric
 
 import org.json.JSONObject
-import java.util.UUID
 
 /** 吉利声纹 RTM（端口修改.md）：`VP_REGISTER_DOWN` / `VP_DEL_UP`。 */
 object VoicePrintRtmProtocol {
@@ -39,13 +38,14 @@ object VoicePrintRtmProtocol {
 
     fun buildVpDelUpJson(
         clientId: String,
+        recordId: String,
         agentId: String,
         registerUuid: String,
         speakerId: String,
     ): String {
         val root = JSONObject()
         root.put("clientId", clientId)
-        root.put("recordId", UUID.randomUUID().toString())
+        root.put("recordId", recordId)
         root.put("type", TYPE_VP_DEL_UP)
         root.put("timestamp", System.currentTimeMillis().toString())
         val payload = JSONObject()

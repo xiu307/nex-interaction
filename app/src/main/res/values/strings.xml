@@ -146,7 +146,7 @@
     <string name="agent_chat_voice_print_delete_ok">声纹已删除</string>
     <string name="agent_chat_voice_print_delete_failed">删除失败：%1$s</string>
     <string name="agent_chat_voice_print_delete_title">删除声纹</string>
-    <string name="agent_chat_voice_print_delete_message">确定删除该声纹？将向 geely_rtm_server 发送 VP_DEL_UP。</string>
+    <string name="agent_chat_voice_print_delete_message">确定删除该声纹？将向 geely_rtm_server 发送 VP_DEL_UP（与 FaceInfo 相同 USER 点对点）。</string>
     <string name="agent_chat_view_agent_config">查看 Agent 配置</string>
     <string name="agent_chat_agent_config_title">startAgentAsync 配置</string>
     <string name="tts_test_single">测试一句话 TTS</string>
