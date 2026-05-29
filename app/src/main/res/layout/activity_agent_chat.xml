@@ -365,7 +365,7 @@
 
     </LinearLayout>
 
-    <!-- 人脸预览 + RTM 上行：纵向排列，展开 RTM 时向下延伸，不与相机图标重叠 -->
+    <!-- 声纹管理悬浮窗 -->
     <LinearLayout
         android:id="@+id/llAgentChatToolFloats"
         android:layout_width="wrap_content"
@@ -379,85 +379,7 @@
         tools:visibility="visible">
 
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardFacePreviewFloat"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxWidth="300dp"
-            android:visibility="gone"
-            app:cardBackgroundColor="@color/bg_log_outer"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="12dp"
-            app:strokeColor="@color/border_default"
-            app:strokeWidth="1dp"
-            tools:visibility="visible">
-
-            <LinearLayout
-                android:id="@+id/llFacePreviewFloatRoot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="6dp">
-
-                <LinearLayout
-                    android:id="@+id/llFacePreviewFloatHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="4dp"
-                    android:paddingTop="4dp">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/ivFacePreviewFloatIcon"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/agent_chat_face_preview_icon_cd"
-                        android:padding="10dp"
-                        android:scaleType="centerInside"
-                        app:srcCompat="@drawable/ic_camera_front"
-                        app:tint="@color/accent_blue" />
-
-                    <TextView
-                        android:id="@+id/tvFacePreviewFloatTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center_vertical"
-                        android:text="@string/agent_chat_face_preview_title_short"
-                        android:textColor="@color/text_title"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:visibility="gone"
-                        tools:visibility="visible" />
-                </LinearLayout>
-
-                <FrameLayout
-                    android:id="@+id/flFacePreviewFloatContent"
-                    android:layout_width="match_parent"
-                    android:layout_height="180dp"
-                    android:layout_marginHorizontal="6dp"
-                    android:layout_marginTop="2dp"
-                    android:background="@android:color/black"
-                    android:visibility="gone"
-                    tools:visibility="visible">
-
-                    <androidx.camera.view.PreviewView
-                        android:id="@+id/faceRtmPreview"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:contentDescription="@string/agent_chat_face_rtm_preview_cd" />
-
-                    <ai.nex.interaction.ui.widget.DebugOverlayView
-                        android:id="@+id/faceRtmDebugOverlay"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
-                </FrameLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardRtmPayloadFloat"
+            android:id="@+id/cardVoicePrintFloat"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -470,87 +392,93 @@
             app:strokeWidth="1dp"
             tools:visibility="visible">
 
-        <LinearLayout
-            android:id="@+id/llRtmPayloadFloatRoot"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="6dp">
-
             <LinearLayout
-                android:id="@+id/llRtmPayloadFloatHeader"
-                android:layout_width="match_parent"
+                android:id="@+id/llVoicePrintFloatRoot"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingHorizontal="4dp"
-                android:paddingTop="4dp">
+                android:orientation="vertical"
+                android:paddingBottom="6dp">
 
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/ivRtmPayloadFloatIcon"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/agent_chat_rtm_payload_icon_cd"
-                    android:padding="10dp"
-                    android:scaleType="centerInside"
-                    app:srcCompat="@drawable/ic_rtm_payload"
-                    app:tint="@color/accent_blue" />
-
-                <TextView
-                    android:id="@+id/tvRtmPayloadFloatTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center_vertical"
-                    android:text="@string/agent_chat_rtm_payload_title_short"
-                    android:textColor="@color/text_title"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCopyRtmPayloadFloat"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="2dp"
-                    android:text="@string/agent_chat_rtm_payload_copy"
-                    android:textColor="@color/accent_blue"
-                    android:textSize="11sp"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-            </LinearLayout>
-
-            <ScrollView
-                android:id="@+id/scrollRtmPayloadFloat"
-                android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:layout_marginHorizontal="6dp"
-                android:layout_marginTop="2dp"
-                android:background="@color/bg_log_content"
-                android:fillViewport="false"
-                android:padding="6dp"
-                android:scrollbars="vertical"
-                android:visibility="gone"
-                tools:visibility="visible">
-
-                <TextView
-                    android:id="@+id/tvRtmPayloadFloat"
+                <LinearLayout
+                    android:id="@+id/llVoicePrintFloatHeader"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="4dp"
+                    android:paddingTop="4dp">
+
+                    <FrameLayout
+                        android:layout_width="48dp"
+                        android:layout_height="48dp">
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/ivVoicePrintFloatIcon"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/agent_chat_voice_print_icon_cd"
+                            android:padding="10dp"
+                            android:scaleType="centerInside"
+                            app:srcCompat="@drawable/ic_mic"
+                            app:tint="@color/accent_blue" />
+
+                        <TextView
+                            android:id="@+id/tvVoicePrintFloatBadge"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_gravity="top|end"
+                            android:background="@drawable/bg_voice_print_badge"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:visibility="gone"
+                            tools:text="2"
+                            tools:visibility="visible" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tvVoicePrintFloatTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:text="@string/agent_chat_voice_print_title_short"
+                        android:textColor="@color/text_title"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvVoicePrintFloatEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/agent_chat_voice_print_empty"
                     android:textColor="@color/text_secondary"
-                    android:textIsSelectable="true"
-                    android:textSize="9sp"
-                    tools:text="{ }" />
-            </ScrollView>
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+                    android:textSize="10sp"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvVoicePrintFloat"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="6dp"
+                    android:layout_marginTop="2dp"
+                    android:maxHeight="220dp"
+                    android:nestedScrollingEnabled="true"
+                    android:overScrollMode="ifContentScrolls"
+                    android:visibility="gone"
+                    tools:itemCount="2"
+                    tools:listitem="@layout/item_voice_print_float"
+                    tools:visibility="visible" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 

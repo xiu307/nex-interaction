@@ -14,7 +14,6 @@ import ai.conv.core.convoai.AgentState
 import ai.conv.core.convoai.ModuleError
 import ai.conv.core.convoai.StateChangeEvent
 import ai.conv.core.convoai.Transcript
-import ai.conv.core.convoai.TranscriptType
 import io.agora.rtc2.Constants.ERR_OK
 import io.agora.rtc2.IRtcEngineEventHandler.RtcStats
 import io.agora.rtc2.video.AgoraVideoFrame
@@ -24,17 +23,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import androidx.appcompat.app.AppCompatActivity
 import ai.conv.core.convoai.IConversationalAIAPIEventHandler
 import ai.conv.core.convoai.InterruptEvent
 import ai.conv.core.convoai.MessageError
 import ai.conv.core.convoai.MessageReceipt
 import ai.conv.core.convoai.Metric
 import ai.conv.core.convoai.VoiceprintStateChangeEvent
-import ai.nex.interaction.biometric.FaceRtmStreamPublisher
-import ai.nex.interaction.biometric.RobotFaceSpeakerBindCoordinator
-import ai.nex.interaction.ui.widget.DebugOverlayView
-import androidx.camera.view.PreviewView
 import ai.conv.core.rtc.RtcEventSink
 import ai.conv.core.rtc.joinConversationChannelWithOptions
 import ai.conv.core.rtc.joinConversationChannelExWithOptions
@@ -42,8 +36,11 @@ import ai.conv.core.rtc.leaveConversationChannelEx
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLogin
 import ai.nex.interaction.biometric.BiometricSalRegistry
+import ai.nex.interaction.biometric.VoicePrintRtmCoordinator
 import ai.nex.interaction.biometric.VoicePrintRtmProtocol
 import ai.nex.interaction.biometric.VoicePrintRtmSession
+import ai.nex.interaction.biometric.VpSpeakerStatus
+import ai.nex.interaction.biometric.VpSpeakerUiItem
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
 import ai.nex.interaction.session.ConversationUserTokenLoader
@@ -103,17 +100,8 @@ class AgentChatViewModel : ViewModel() {
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
     val debugLogList: StateFlow<List<String>> = _debugLogList.asStateFlow()
 
-    /** 最近一次经 RTM 发往服务端的人脸/人体上行 JSON（`ROBOT_FACE_INFO_UP`），供悬浮窗查看。 */
-    private val _lastFaceRtmUplinkPayload = MutableStateFlow("")
-    val lastFaceRtmUplinkPayload: StateFlow<String> = _lastFaceRtmUplinkPayload.asStateFlow()
-
-    fun onFaceRtmUplinkPayload(json: String) {
-        _lastFaceRtmUplinkPayload.value = json
-    }
-
-    fun clearFaceRtmUplinkPayloadPreview() {
-        _lastFaceRtmUplinkPayload.value = ""
-    }
+    private val _vpSpeakerList = MutableStateFlow(BiometricSalRegistry.buildVpSpeakerUiList())
+    val vpSpeakerList: StateFlow<List<VpSpeakerUiItem>> = _vpSpeakerList.asStateFlow()
 
     private val connection = ConnectionSessionState()
     private val agentSession = AgentSessionState()
@@ -139,8 +127,6 @@ class AgentChatViewModel : ViewModel() {
             onStatusLog = { addStatusLog(it) },
         )
     }
-
-    private val robotFaceSpeakerBind = RobotFaceSpeakerBindCoordinator()
 
     private val rtcEventSink = object : RtcEventSink {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
@@ -230,15 +216,6 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
             addTranscript(transcript)
-            if (transcript.type == TranscriptType.USER) {
-                val rtm = managerOrNull?.rtmClient ?: return
-                robotFaceSpeakerBind.maybeSendOnUserTranscript(
-                    transcript = transcript,
-                    connectionConnected = _uiState.value.connectionState == ConnectionState.Connected,
-                    rtmClient = rtm,
-                    clientId = rtmReportClientId(),
-                )
-            }
         }
 
         override fun onDebugLog(log: String) {
@@ -248,15 +225,16 @@ class AgentChatViewModel : ViewModel() {
         override fun onGeelyRtmMessage(message: Map<String, Any>) {
             if (message["type"]?.toString() != VoicePrintRtmProtocol.TYPE_VP_REGISTER_DOWN) return
             val speakers = VoicePrintRtmProtocol.parseVpRegisterDownSpeakers(message)
-            val added = BiometricSalRegistry.saveVpRegisterDownSpeakers(
+            val saved = BiometricSalRegistry.saveVpRegisterDownPending(
                 speakers = speakers,
                 localRtcUids = buildLocalRtcUidSet(),
             )
-            if (added <= 0) {
-                addStatusLog("VP_REGISTER_DOWN: no speaker for local rtc_uid=${buildLocalRtcUidSet()}")
+            if (saved <= 0) {
+                addStatusLog("VP_REGISTER_DOWN: no pending speaker for local rtc_uid=${buildLocalRtcUidSet()}")
                 return
             }
-            addStatusLog("VP_REGISTER_DOWN: saved $added speaker(s), locking mode — no agent restart")
+            refreshVpSpeakerList()
+            addStatusLog("VP_REGISTER_DOWN: $saved speaker(s), confirm or delete in voice print float")
         }
     }
 
@@ -711,10 +689,7 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 与 join 请求体 `remoteRtcUid` / `llm.params.lables.userName` 一致；
-     * [ROBOT_FACE_SPEAKER_BIND]、[ROBOT_FACE_INFO_UP] 顶层 `clientId` 及 facedet [FaceDetectorConfig.deviceId] 均用此值。
-     */
+    /** RTM 声纹协议顶层 `clientId`，与 join 请求体本端 RTC UID 一致。 */
     private fun rtmReportClientId(): String = userId.toString()
 
     private fun buildLocalRtcUidSet(): Set<String> =
@@ -728,42 +703,13 @@ class AgentChatViewModel : ViewModel() {
         VoicePrintRtmSession.clientId = rtmReportClientId()
     }
 
-    /**
-     * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
-     * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
-     */
-    fun refreshRobotFaceRtmUplink(
-        activity: AppCompatActivity,
-        rtmFacePreviewView: PreviewView? = null,
-        rtmFaceDebugOverlay: DebugOverlayView? = null,
-    ) {
-        if (_uiState.value.connectionState != ConnectionState.Connected) {
-            FaceRtmStreamPublisher.stopAll()
-            return
-        }
-        if (externalVideoPublish.isCustomVideoPublishing) {
-            FaceRtmStreamPublisher.stopAll()
-            return
-        }
-        val m = managerOrNull ?: return
-        if (connection.channelName.isEmpty()) return
-        FaceRtmStreamPublisher.start(
-            activity = activity,
-            rtmClient = m.rtmClient,
-            clientId = rtmReportClientId(),
-            recordId = connection.channelName,
-            previewView = rtmFacePreviewView,
-            debugOverlay = rtmFaceDebugOverlay,
-        )
-    }
-
     /** 挂断：停止 Agent、取消 RTM 订阅、离开 RTC 并清理会话状态。 */
     fun hangup() {
         viewModelScope.launch {
             try {
                 joinInFlight = false
                 val m = managerOrNull ?: return@launch
-                stopFaceUplinkAndExternalAudio()
+                stopExternalAudioCapture()
                 m.conversationalAIAPI.unsubscribeMessage(connection.channelName) { errorInfo ->
                     if (errorInfo != null) {
                         Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
@@ -795,7 +741,6 @@ class AgentChatViewModel : ViewModel() {
                 agentSession.clearAgentRestFields()
                 VoicePrintRtmSession.clear()
                 resetConversationUiAfterHangup()
-                robotFaceSpeakerBind.clearDedupeState()
                 Log.d(TAG, "Hangup completed")
             } catch (e: Exception) {
                 Log.e(TAG, "Error during hangup: ${e.message}", e)
@@ -806,8 +751,7 @@ class AgentChatViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         joinInFlight = false
-        robotFaceSpeakerBind.clearDedupeState()
-        stopFaceUplinkAndExternalAudio()
+        stopExternalAudioCapture()
         leaveRtcChannel()
         logoutRtm()
         managerOrNull?.destroy()
@@ -832,13 +776,6 @@ class AgentChatViewModel : ViewModel() {
     private fun stopExternalAudioCapture() {
         managerOrNull?.audioInputManager?.stopAndUnpublish()
         _uiState.value = _uiState.value.copy(isAudioInputEnabled = false)
-    }
-
-    /** 停止人脸 RTM 上行与自定义音频采集（挂断与 ViewModel 销毁共用）。 */
-    private fun stopFaceUplinkAndExternalAudio() {
-        FaceRtmStreamPublisher.stopAll()
-        clearFaceRtmUplinkPayloadPreview()
-        stopExternalAudioCapture()
     }
 
     private fun resetConversationUiAfterHangup() {
@@ -918,4 +855,41 @@ class AgentChatViewModel : ViewModel() {
         rotation = rotation,
         timestampMs = timestampMs
     )
+
+    fun refreshVpSpeakerList() {
+        _vpSpeakerList.value = BiometricSalRegistry.buildVpSpeakerUiList()
+    }
+
+    /** 添加：协议无上行，服务端已在 VP_REGISTER_DOWN 前完成 add_sal_speakers，仅本地确认。 */
+    fun confirmVpSpeaker(speakerId: String): Boolean {
+        if (!BiometricSalRegistry.confirmPendingVpSpeaker(speakerId)) return false
+        refreshVpSpeakerList()
+        addStatusLog("Voice print confirmed locally: speakerId=$speakerId")
+        return true
+    }
+
+    fun deleteVpSpeaker(speakerId: String, fromPending: Boolean, onDone: (Boolean, String?) -> Unit) {
+        if (speakerId.isEmpty()) {
+            onDone(false, "empty speakerId")
+            return
+        }
+        VoicePrintRtmCoordinator.trySendVpDelUp(speakerId) { ok, msg ->
+            if (!ok) {
+                addStatusLog("VP_DEL_UP failed: ${msg ?: "unknown"} speakerId=$speakerId")
+                onDone(false, msg)
+                return@trySendVpDelUp
+            }
+            if (fromPending) {
+                BiometricSalRegistry.removePendingVpSpeaker(speakerId)
+            } else {
+                BiometricSalRegistry.removeVpSalSpeaker(speakerId)
+            }
+            refreshVpSpeakerList()
+            addStatusLog("Voice print deleted: speakerId=$speakerId (VP_DEL_UP sent)")
+            onDone(true, null)
+        }
+    }
+
+    fun pendingVpSpeakerCount(): Int =
+        _vpSpeakerList.value.count { it.status == VpSpeakerStatus.PENDING }
 }

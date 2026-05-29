@@ -5,7 +5,6 @@ import androidx.appcompat.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -27,7 +26,8 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.BiometricSalRegistry
-import ai.nex.interaction.biometric.FaceRtmStreamPublisher
+import ai.nex.interaction.biometric.VpSpeakerStatus
+import ai.nex.interaction.biometric.VpSpeakerUiItem
 import ai.conv.core.net.repository.AgentRepository
 import ai.nex.interaction.tts.TTSManager
 import ai.nex.interaction.tools.PermissionHelp
@@ -44,7 +44,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 /**
  * Activity for agent chat interface
@@ -61,13 +60,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private var hasShownReRegisterPrompt = false
     private var hasShownBiometricSoftHint = false
 
-    /** RTM 上行悬浮窗：默认仅图标；点图标展开/收起详情 */
-    private var isRtmPayloadFloatExpanded = false
-    /** 记住 RTM 详情上次滚动位置，展开/刷新时优先恢复。 */
-    private var lastRtmPayloadScrollY = 0
-
-    /** 人脸实时预览悬浮窗：与 RTM 同款，默认仅相机图标 */
-    private var isFacePreviewFloatExpanded = false
+    /** 声纹管理悬浮窗：默认仅麦克风图标 */
+    private var isVoicePrintFloatExpanded = false
+    private lateinit var voicePrintFloatAdapter: VoicePrintFloatAdapter
     private var ttsStreamTestJob: Job? = null
 
     // Track whether to automatically scroll to bottom
@@ -94,12 +89,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
         // Observe debug log changes
         observeDebugLogs()
-
-        FaceRtmStreamPublisher.debugPayloadListener = { json ->
-            viewModel.onFaceRtmUplinkPayload(json)
-        }
-
-        observeFaceRtmPayloadFloat()
+        observeVoicePrintFloat()
 
         lifecycleScope.launch {
             viewModel.uiState
@@ -109,19 +99,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     val connected = conn == AgentChatViewModel.ConnectionState.Connected
                     mBinding?.apply {
                         if (!connected) {
-                            isRtmPayloadFloatExpanded = false
-                            isFacePreviewFloatExpanded = false
+                            isVoicePrintFloatExpanded = false
+                            applyVoicePrintFloatExpandedState()
                         }
-                                               cardRtmPayloadFloat.isVisible = connected
-                        if (connected) {
-                            applyRtmPayloadFloatExpandedState()
-                            applyFacePreviewFloatExpandedState()
-                            refreshFaceRtmUplinkIfNeeded()
-                            updateFacePreviewFloatVisibility()
-                        } else {
-                            FaceRtmStreamPublisher.stopAll()
-                            viewModel.clearFaceRtmUplinkPayloadPreview()
-                            updateFacePreviewFloatVisibility()
+                        updateVoicePrintFloatVisibility()
+                        if (!connected) {
                             maybeShowBiometricSoftHint()
                         }
                     }
@@ -129,78 +111,105 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
     }
 
-    /** 左侧悬浮卡片：随每次上行 JSON 刷新内容；展开时才滚动到底。 */
-    private fun observeFaceRtmPayloadFloat() {
+    private fun observeVoicePrintFloat() {
         lifecycleScope.launch {
-            viewModel.lastFaceRtmUplinkPayload.collect { raw ->
-                applyFaceRtmPayloadFloatText(raw)
+            viewModel.vpSpeakerList.collect { list ->
+                applyVoicePrintFloatList(list)
             }
         }
     }
 
-    private fun toggleRtmPayloadFloatExpanded() {
-        isRtmPayloadFloatExpanded = !isRtmPayloadFloatExpanded
-        applyRtmPayloadFloatExpandedState()
+    private fun toggleVoicePrintFloatExpanded() {
+        isVoicePrintFloatExpanded = !isVoicePrintFloatExpanded
+        applyVoicePrintFloatExpandedState()
     }
 
-    private fun applyRtmPayloadFloatExpandedState() {
+    private fun applyVoicePrintFloatExpandedState() {
         mBinding?.apply {
-            val expanded = isRtmPayloadFloatExpanded
-            if (!expanded) {
-                lastRtmPayloadScrollY = scrollRtmPayloadFloat.scrollY
-            }
-            tvRtmPayloadFloatTitle.isVisible = expanded
-            btnCopyRtmPayloadFloat.isVisible = expanded
-            scrollRtmPayloadFloat.isVisible = expanded
+            val expanded = isVoicePrintFloatExpanded
+            val list = viewModel.vpSpeakerList.value
+            val empty = list.isEmpty()
+            tvVoicePrintFloatTitle.isVisible = expanded
+            tvVoicePrintFloatEmpty.isVisible = expanded && empty
+            rvVoicePrintFloat.isVisible = expanded && !empty
             val panelW = if (expanded) {
                 resources.getDimensionPixelSize(R.dimen.rtm_float_expanded_width)
             } else {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             }
-            llRtmPayloadFloatRoot.layoutParams = llRtmPayloadFloatRoot.layoutParams.apply {
+            llVoicePrintFloatRoot.layoutParams = llVoicePrintFloatRoot.layoutParams.apply {
                 width = panelW
             }
-            llRtmPayloadFloatHeader.gravity = if (expanded) {
+            llVoicePrintFloatHeader.gravity = if (expanded) {
                 Gravity.CENTER_VERTICAL or Gravity.START
             } else {
                 Gravity.CENTER
             }
-            if (expanded) {
-                scrollRtmPayloadFloat.post {
-                    restoreRtmPayloadScroll()
+        }
+    }
+
+    private fun applyVoicePrintFloatList(list: List<VpSpeakerUiItem>) {
+        mBinding?.apply {
+            if (::voicePrintFloatAdapter.isInitialized) {
+                voicePrintFloatAdapter.submitList(list)
+            }
+            val pendingCount = list.count { it.status == VpSpeakerStatus.PENDING }
+            if (pendingCount > 0) {
+                tvVoicePrintFloatBadge.isVisible = true
+                tvVoicePrintFloatBadge.text = pendingCount.coerceAtMost(99).toString()
+            } else {
+                tvVoicePrintFloatBadge.isVisible = false
+            }
+            if (isVoicePrintFloatExpanded) {
+                val empty = list.isEmpty()
+                tvVoicePrintFloatEmpty.isVisible = empty
+                rvVoicePrintFloat.isVisible = !empty
+            }
+            updateVoicePrintFloatVisibility()
+        }
+    }
+
+    private fun updateVoicePrintFloatVisibility() {
+        val b = mBinding ?: return
+        val connected = viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
+        val hasItems = viewModel.vpSpeakerList.value.isNotEmpty()
+        b.cardVoicePrintFloat.isVisible = connected || hasItems
+        if (!connected && !hasItems) {
+            isVoicePrintFloatExpanded = false
+            applyVoicePrintFloatExpandedState()
+        }
+    }
+
+    private fun confirmVoicePrintItem(item: VpSpeakerUiItem) {
+        if (viewModel.confirmVpSpeaker(item.speakerId)) {
+            Toast.makeText(this, R.string.agent_chat_voice_print_confirm_ok, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun confirmDeleteVoicePrintItem(item: VpSpeakerUiItem) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.agent_chat_voice_print_delete_title)
+            .setMessage(R.string.agent_chat_voice_print_delete_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.agent_chat_voice_print_delete) { _, _ ->
+                viewModel.deleteVpSpeaker(
+                    speakerId = item.speakerId,
+                    fromPending = item.status == VpSpeakerStatus.PENDING,
+                ) { ok, msg ->
+                    runOnUiThread {
+                        if (ok) {
+                            Toast.makeText(this, R.string.agent_chat_voice_print_delete_ok, Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(
+                                this,
+                                getString(R.string.agent_chat_voice_print_delete_failed, msg ?: "unknown"),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
                 }
             }
-        }
-    }
-
-    private fun toggleFacePreviewFloatExpanded() {
-        isFacePreviewFloatExpanded = !isFacePreviewFloatExpanded
-        applyFacePreviewFloatExpandedState()
-    }
-
-    private fun applyFacePreviewFloatExpandedState() {
-        mBinding?.apply {
-            val expanded = isFacePreviewFloatExpanded
-            tvFacePreviewFloatTitle.isVisible = expanded
-            flFacePreviewFloatContent.isVisible = expanded
-            val panelW = if (expanded) {
-                resources.getDimensionPixelSize(R.dimen.rtm_float_expanded_width)
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-            llFacePreviewFloatRoot.layoutParams = llFacePreviewFloatRoot.layoutParams.apply {
-                width = panelW
-            }
-            llFacePreviewFloatHeader.gravity = if (expanded) {
-                Gravity.CENTER_VERTICAL or Gravity.START
-            } else {
-                Gravity.CENTER
-            }
-            if (expanded) {
-                // 收起时 flFacePreviewFloatContent 为 gone，PreviewView 无有效 Surface；展开后 post 再绑相机
-                flFacePreviewFloatContent.post { refreshFaceRtmUplinkIfNeeded() }
-            }
-        }
+            .show()
     }
 
     private fun toggleVideoInput() {
@@ -253,7 +262,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         cameraVideoInputManager.start(videoInputPreviewView ?: return)
         isVideoInputStarted = true
         updateVideoInputButton()
-        updateFacePreviewFloatVisibility()
     }
 
     private fun stopVideoInput() {
@@ -266,12 +274,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         videoInputPreviewView = null
         isVideoInputStarted = false
         updateVideoInputButton()
-        viewModel.refreshRobotFaceRtmUplink(
-            this,
-            mBinding?.faceRtmPreview,
-            mBinding?.faceRtmDebugOverlay,
-        )
-        updateFacePreviewFloatVisibility()
     }
 
     private fun updateVideoInputButton() {
@@ -314,7 +316,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     override fun initView() {
         mBinding?.apply {
             setOnApplyWindowInsetsListener(root)
-            faceRtmPreview.scaleType = PreviewView.ScaleType.FILL_CENTER
 
             // Setup RecyclerView for transcript list
             setupRecyclerView()
@@ -378,38 +379,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 true
             }
 
-            btnCopyRtmPayloadFloat.setOnClickListener {
-                val raw = viewModel.lastFaceRtmUplinkPayload.value
-                if (raw.isEmpty()) {
-                    Toast.makeText(this@AgentChatActivity, getString(R.string.agent_chat_rtm_payload_empty), Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                val display = formatJsonForDisplay(raw)
-                copyPlainTextToClipboard(display, "rtm_face_uplink_json")
-                Toast.makeText(this@AgentChatActivity, getString(R.string.agent_chat_log_copied), Toast.LENGTH_SHORT).show()
+            voicePrintFloatAdapter = VoicePrintFloatAdapter(
+                onConfirm = { item -> confirmVoicePrintItem(item) },
+                onDelete = { item -> confirmDeleteVoicePrintItem(item) },
+            )
+            rvVoicePrintFloat.layoutManager = LinearLayoutManager(this@AgentChatActivity)
+            rvVoicePrintFloat.adapter = voicePrintFloatAdapter
+            ivVoicePrintFloatIcon.setOnClickListener {
+                toggleVoicePrintFloatExpanded()
             }
-            ivRtmPayloadFloatIcon.setOnClickListener {
-                toggleRtmPayloadFloatExpanded()
-            }
-            scrollRtmPayloadFloat.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                if (isRtmPayloadFloatExpanded) {
-                    lastRtmPayloadScrollY = scrollY
-                }
-            }
-            ivFacePreviewFloatIcon.setOnClickListener {
-                toggleFacePreviewFloatExpanded()
-            }
-            // initData 先于 initView：首帧 collect 时 mBinding 可能为 null；配置变更后须补一次悬浮卡片可见性与文案
-            cardRtmPayloadFloat.isVisible =
-                viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
-            isRtmPayloadFloatExpanded = false
-            isFacePreviewFloatExpanded = false
-            applyRtmPayloadFloatExpandedState()
-            applyFacePreviewFloatExpandedState()
-            applyFaceRtmPayloadFloatText(viewModel.lastFaceRtmUplinkPayload.value)
-            updateFacePreviewFloatVisibility()
-            // collect 可能早于 initView 执行；旋转后 distinctUntilChanged 不再触发，须在此补绑相机
-            refreshFaceRtmUplinkIfNeeded()
+            isVoicePrintFloatExpanded = false
+            applyVoicePrintFloatExpandedState()
+            applyVoicePrintFloatList(viewModel.vpSpeakerList.value)
+            updateVoicePrintFloatVisibility()
         }
     }
 
@@ -437,77 +419,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     override fun onResume() {
         super.onResume()
-        applyFaceRtmPipelineOverlayAlign()
-        refreshFaceRtmUplinkIfNeeded()
-    }
-
-    /**
-     * 已连接且未推自定义视频时，将 facedet/CameraX 绑定到**当前** Activity 与 PreviewView。
-     * 旋转重建后 [connectionState] 不变会导致 Flow 不再 emit，必须在 initView/onResume/展开预览后显式重绑，否则会黑屏。
-     */
-    private fun refreshFaceRtmUplinkIfNeeded() {
-        if (viewModel.uiState.value.connectionState != AgentChatViewModel.ConnectionState.Connected) return
-        val b = mBinding ?: return
-        // 会话连接后默认先跑“无预览”识别链路；只有用户展开悬浮预览时才绑定 PreviewView。
-        // 这样不需要点击预览也会持续有人脸 RTM 上行。
-        val bindPreview = isFacePreviewFloatExpanded && b.flFacePreviewFloatContent.isVisible
-        viewModel.refreshRobotFaceRtmUplink(
-            this,
-            if (bindPreview) b.faceRtmPreview else null,
-            if (bindPreview) b.faceRtmDebugOverlay else null,
-        )
-    }
-
-    /** 与 face-detc-java MainActivity：窄屏竖屏前置预览与 DebugOverlay Y 对齐。 */
-    private fun applyFaceRtmPipelineOverlayAlign() {
-        val overlay = mBinding?.faceRtmDebugOverlay ?: return
-        val sw = resources.configuration.smallestScreenWidthDp
-        val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-        overlay.setInvertPreviewY(sw < 600 && portrait)
-    }
-
-    /** 人脸上行管线可用时展示（已连接且未占用自定义视频）；隐藏时收起展开态。 */
-    private fun updateFacePreviewFloatVisibility() {
-        val b = mBinding ?: return
-        val connected = viewModel.uiState.value.connectionState == AgentChatViewModel.ConnectionState.Connected
-        val show = connected && !isVideoInputStarted
-        b.cardFacePreviewFloat.isVisible = show
-        if (!show) {
-            isFacePreviewFloatExpanded = false
-            applyFacePreviewFloatExpandedState()
-        }
-    }
-
-    private fun applyFaceRtmPayloadFloatText(raw: String) {
-        mBinding?.apply {
-            tvRtmPayloadFloat.text = if (raw.isEmpty()) {
-                getString(R.string.agent_chat_rtm_payload_empty)
-            } else {
-                formatJsonForDisplay(raw)
-            }
-            if (isRtmPayloadFloatExpanded) {
-                scrollRtmPayloadFloat.post {
-                    restoreRtmPayloadScroll()
-                }
-            }
-        }
-    }
-
-    private fun restoreRtmPayloadScroll() {
-        mBinding?.scrollRtmPayloadFloat?.let { scrollView ->
-            val child = scrollView.getChildAt(0) ?: return@let
-            val maxScroll = (child.height - scrollView.height).coerceAtLeast(0)
-            val target = lastRtmPayloadScrollY.coerceIn(0, maxScroll)
-            scrollView.scrollTo(0, target)
-        }
-    }
-
-    private fun formatJsonForDisplay(raw: String): String {
-        return try {
-            JSONObject(raw).toString(2)
-        } catch (_: Exception) {
-            raw
-        }
+        updateVoicePrintFloatVisibility()
     }
 
     private fun copyPlainTextToClipboard(label: String, clipLabel: String) {
@@ -909,7 +821,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     override fun onDestroy() {
         ttsStreamTestJob?.cancel()
         TTSManager.getInstance().stop()
-        FaceRtmStreamPublisher.debugPayloadListener = null
         stopVideoInput()
         cameraVideoInputManager.release()
         super.onDestroy()

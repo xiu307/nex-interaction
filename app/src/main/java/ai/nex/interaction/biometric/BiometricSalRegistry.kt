@@ -2,7 +2,6 @@ package ai.nex.interaction.biometric
 
 import android.content.Context
 import ai.nex.interaction.AgentApp
-import ai.nex.interaction.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -30,6 +29,27 @@ data class VpSalSpeakerRecord(
     val sampleUrl: String,
 )
 
+/** 待用户确认的声纹（`VP_REGISTER_DOWN` 先入 pending，用户点「添加」后进 active）。 */
+data class VpPendingSpeakerRecord(
+    val registerUuid: String,
+    val speakerId: String,
+    val rtcUid: String,
+    val sampleUrl: String,
+    val receivedAtEpochMs: Long,
+)
+
+enum class VpSpeakerStatus { PENDING, ACTIVE }
+
+/** 声纹悬浮窗列表项。 */
+data class VpSpeakerUiItem(
+    val speakerId: String,
+    val registerUuid: String,
+    val rtcUid: String,
+    val sampleUrl: String,
+    val status: VpSpeakerStatus,
+    val receivedAtEpochMs: Long = 0L,
+)
+
 /**
  * 声纹与面部注册页的本地持久化（SharedPreferences，等价原工程 MMKV）。
  */
@@ -51,6 +71,7 @@ object BiometricSalRegistry {
     private const val KEY_MAP = "biometric_sal_face_id_pcm_map"
     private const val KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL = "voice_print_register_sal_pcm_url_v1"
     private const val KEY_VP_SAL_SPEAKERS = "vp_sal_speakers_v1"
+    private const val KEY_VP_PENDING_SPEAKERS = "vp_pending_speakers_v1"
     /** 历史人脸 URL 独立 map；已废弃，仅 [clearAllRegistration] 等处移除残留。 */
     private const val LEGACY_FACE_IMAGE_MAP_KEY = "biometric_sal_face_id_face_image_map"
     private const val KEY_REGISTRATION_SNAPSHOT = "biometric_registration_snapshot_v1"
@@ -58,7 +79,6 @@ object BiometricSalRegistry {
     private const val KEY_FACE_ID_USER_ID_MAP = "biometric_face_id_user_id_map_v1"
     private const val KEY_LAST_REGISTERED_USER_ID = "biometric_last_face_id"
 
-    private const val KEY_ROBOT_FACE_RTM = "robot_face_rtm_uplink_enabled"
     private const val GENERATED_USER_ID_START = 6000
 
     private val gson = Gson()
@@ -155,7 +175,110 @@ object BiometricSalRegistry {
     fun getVoicePrintRegisterSalPcmUrl(): String? =
         prefs().getString(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL, null)?.trim()?.takeIf { it.isNotEmpty() && isHttpUrl(it) }
 
-    /** `VP_REGISTER_DOWN`：按 [localRtcUids] 过滤后落库。 */
+    /** `VP_REGISTER_DOWN`：按 [localRtcUids] 过滤后写入 pending（待用户确认）。 */
+    fun saveVpRegisterDownPending(
+        speakers: List<VoicePrintRtmProtocol.VpRegisterDownSpeaker>,
+        localRtcUids: Set<String>,
+    ): Int {
+        if (speakers.isEmpty() || localRtcUids.isEmpty()) return 0
+        val active = loadVpSalSpeakers()
+        val pending = loadVpPendingSpeakers().toMutableMap()
+        var saved = 0
+        val now = System.currentTimeMillis()
+        for (s in speakers) {
+            if (s.rtcUid !in localRtcUids) continue
+            if (!isHttpUrl(s.sampleUrl)) continue
+            if (active.containsKey(s.speakerId)) continue
+            val prev = pending[s.speakerId]
+            pending[s.speakerId] = VpPendingSpeakerRecord(
+                registerUuid = s.registerUuid,
+                speakerId = s.speakerId,
+                rtcUid = s.rtcUid,
+                sampleUrl = s.sampleUrl,
+                receivedAtEpochMs = prev?.receivedAtEpochMs ?: now,
+            )
+            saved++
+        }
+        if (saved > 0) {
+            prefs().edit().putString(KEY_VP_PENDING_SPEAKERS, gson.toJson(pending)).commit()
+        }
+        return saved
+    }
+
+    fun listPendingVpSpeakers(): List<VpPendingSpeakerRecord> =
+        loadVpPendingSpeakers().values.sortedByDescending { it.receivedAtEpochMs }
+
+    fun listActiveVpSpeakers(): List<VpSalSpeakerRecord> =
+        loadVpSalSpeakers().values.sortedBy { it.speakerId }
+
+    fun buildVpSpeakerUiList(): List<VpSpeakerUiItem> {
+        val pending = listPendingVpSpeakers().map {
+            VpSpeakerUiItem(
+                speakerId = it.speakerId,
+                registerUuid = it.registerUuid,
+                rtcUid = it.rtcUid,
+                sampleUrl = it.sampleUrl,
+                status = VpSpeakerStatus.PENDING,
+                receivedAtEpochMs = it.receivedAtEpochMs,
+            )
+        }
+        val active = listActiveVpSpeakers().map {
+            VpSpeakerUiItem(
+                speakerId = it.speakerId,
+                registerUuid = it.registerUuid,
+                rtcUid = it.rtcUid,
+                sampleUrl = it.sampleUrl,
+                status = VpSpeakerStatus.ACTIVE,
+            )
+        }
+        return pending + active
+    }
+
+    fun confirmPendingVpSpeaker(speakerId: String): Boolean {
+        if (speakerId.isEmpty()) return false
+        val pending = loadVpPendingSpeakers()
+        val record = pending[speakerId] ?: return false
+        val active = loadVpSalSpeakers().toMutableMap()
+        active[speakerId] = VpSalSpeakerRecord(
+            registerUuid = record.registerUuid,
+            speakerId = record.speakerId,
+            rtcUid = record.rtcUid,
+            sampleUrl = record.sampleUrl,
+        )
+        saveFaceIdToPcmUrl(speakerId, record.sampleUrl)
+        val remainingPending = pending.filterKeys { it != speakerId }
+        prefs().edit()
+            .putString(KEY_VP_SAL_SPEAKERS, gson.toJson(active))
+            .putString(KEY_VP_PENDING_SPEAKERS, gson.toJson(remainingPending))
+            .commit()
+        return true
+    }
+
+    fun removePendingVpSpeaker(speakerId: String) {
+        if (speakerId.isEmpty()) return
+        val pending = loadVpPendingSpeakers().toMutableMap()
+        if (pending.remove(speakerId) == null) return
+        prefs().edit().putString(KEY_VP_PENDING_SPEAKERS, gson.toJson(pending)).commit()
+    }
+
+    fun getVpPendingSpeaker(speakerId: String): VpPendingSpeakerRecord? =
+        loadVpPendingSpeakers()[speakerId]
+
+    /** `VP_DEL_UP`：active 优先，否则 pending（服务端下发前已 add_sal_speakers）。 */
+    fun getVpSpeakerForDelUp(speakerId: String): VpSalSpeakerRecord? {
+        loadVpSalSpeakers()[speakerId]?.let { return it }
+        getVpPendingSpeaker(speakerId)?.let { pending ->
+            return VpSalSpeakerRecord(
+                registerUuid = pending.registerUuid,
+                speakerId = pending.speakerId,
+                rtcUid = pending.rtcUid,
+                sampleUrl = pending.sampleUrl,
+            )
+        }
+        return null
+    }
+
+    /** `VP_REGISTER_DOWN`：按 [localRtcUids] 过滤后直接落 active（注册页等场景）。 */
     fun saveVpRegisterDownSpeakers(
         speakers: List<VoicePrintRtmProtocol.VpRegisterDownSpeaker>,
         localRtcUids: Set<String>,
@@ -407,13 +530,14 @@ object BiometricSalRegistry {
     }
 
     /**
-     * 清除本页所有登记数据（URL 映射、快照、last faceId、本地路径键）。不修改 [KEY_ROBOT_FACE_RTM]。
+     * 清除本页所有登记数据（URL 映射、快照、last faceId、本地路径键）。
      */
     fun clearAllRegistration() {
         val e = prefs().edit()
         e.remove(KEY_MAP)
         e.remove(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL)
         e.remove(KEY_VP_SAL_SPEAKERS)
+        e.remove(KEY_VP_PENDING_SPEAKERS)
         e.remove(LEGACY_FACE_IMAGE_MAP_KEY)
         e.remove(KEY_REGISTRATION_SNAPSHOT)
         e.remove(KEY_REGISTRATION_SNAPSHOT_MAP)
@@ -434,13 +558,6 @@ object BiometricSalRegistry {
 
     fun getLastRegisteredFaceId(): String? =
         prefs().getString(KEY_LAST_REGISTERED_USER_ID, "")?.takeIf { it.isNotEmpty() }
-
-    fun setRobotFaceRtmEnabled(enabled: Boolean) {
-        prefs().edit().putBoolean(KEY_ROBOT_FACE_RTM, enabled).apply()
-    }
-
-    fun isRobotFaceRtmEnabled(): Boolean =
-        prefs().getBoolean(KEY_ROBOT_FACE_RTM, BuildConfig.DEBUG)
 
     private fun loadRegistrationSnapshotMap(): Map<String, BiometricRegistrationSnapshot> {
         val json = prefs().getString(KEY_REGISTRATION_SNAPSHOT_MAP, "") ?: ""
@@ -469,6 +586,17 @@ object BiometricSalRegistry {
         return try {
             val type = object : TypeToken<Map<String, VpSalSpeakerRecord>>() {}.type
             gson.fromJson<Map<String, VpSalSpeakerRecord>>(json, type) ?: emptyMap()
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun loadVpPendingSpeakers(): Map<String, VpPendingSpeakerRecord> {
+        val json = prefs().getString(KEY_VP_PENDING_SPEAKERS, "") ?: ""
+        if (json.isEmpty()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, VpPendingSpeakerRecord>>() {}.type
+            gson.fromJson<Map<String, VpPendingSpeakerRecord>>(json, type) ?: emptyMap()
         } catch (_: Exception) {
             emptyMap()
         }

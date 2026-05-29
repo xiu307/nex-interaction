@@ -6,8 +6,12 @@ object VoicePrintRtmCoordinator {
 
     private const val TAG = "VoicePrintRtm"
 
+    /**
+     * Message Channel 上行 `VP_DEL_UP` → speech-rtm → SAL delete_sal_speakers。
+     * pending / active 均可删（下行时服务端已完成 add_sal_speakers）。
+     */
     fun trySendVpDelUp(speakerId: String, callback: (Boolean, String?) -> Unit = { _, _ -> }) {
-        val record = BiometricSalRegistry.getVpSalSpeaker(speakerId) ?: run {
+        val record = BiometricSalRegistry.getVpSpeakerForDelUp(speakerId) ?: run {
             callback(false, "no VP speaker record")
             return
         }

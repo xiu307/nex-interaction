@@ -3,7 +3,6 @@ package ai.nex.interaction.video
 import ai.conv.core.media.audio.CustomAudioInputManager
 import ai.conv.core.rtc.buildConversationChannelMediaOptions
 import ai.conv.core.media.video.ExternalVideoCaptureManager
-import ai.nex.interaction.biometric.FaceRtmStreamPublisher
 import ai.nex.interaction.session.ConnectionSessionState
 import io.agora.rtc2.Constants.ERR_OK
 import io.agora.rtc2.RtcEngineEx
@@ -88,9 +87,6 @@ class ConversationExternalVideoPublishController(
         return if (result == ERR_OK) {
             customVideoTrackPublished = enabled
             manager.setFramePushEnabled(enabled)
-            if (enabled) {
-                FaceRtmStreamPublisher.stopAll()
-            }
             onStatusLog(
                 if (enabled) {
                     "External video publishing enabled"

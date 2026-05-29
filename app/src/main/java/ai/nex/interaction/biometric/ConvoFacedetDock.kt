@@ -72,28 +72,12 @@ object ConvoFacedetDock {
     }
 
     /**
-     * @param deviceIdForReport 与 RTC 本端 UID / LLM `lables.userName` 一致（勿再用 [stableDeviceId]），便于与 RTM 顶层 clientId 对齐。
-     */
-    fun configForLiveSession(context: Context, deviceIdForReport: String): FaceDetectorConfig {
-        return FaceDetectorConfig().apply {
-            deviceId = deviceIdForReport
-            applyMainActivityDemoPipelineFields(this)
-            poseEmaAlpha = 0.7f
-            poseWindowSize = 3
-        }
-    }
-
-    /**
      * 单条删除时同步清理：
      * 1. 人脸库 **embedding**（[IdentityManager.deleteEmbedding]，与旧「清除注册」一致）；
      * 2. pipeline **跟踪状态**（[FaceDetector.clearFace]）。
-     *
-     * 先处理 [FaceRtmStreamPublisher]（内部 [RobotFaceDetectionCollector]）中正在运行的实例，再对注册用临时 [FaceDetector] 执行（无实时预览时也能删库）。
      */
     fun clearFacePipelineState(context: Context, faceId: String) {
         if (faceId.isEmpty()) return
-        FaceRtmStreamPublisher.deleteEmbeddingIfRunning(faceId)
-        FaceRtmStreamPublisher.clearFaceIfRunning(faceId)
         runWithEphemeralRegistrationDetector(context) { fd ->
             runCatching {
                 fd.multiPersonRecognitionManager?.getIdentityManager()?.deleteEmbedding(faceId)
@@ -106,8 +90,6 @@ object ConvoFacedetDock {
      * 全量清理：删除人脸库中全部 embedding + pipeline 软重置（与旧「清除注册」删库 + [clearAllFaces] 一致）。
      */
     fun clearAllFacesPipelineState(context: Context) {
-        FaceRtmStreamPublisher.deleteAllEmbeddingsIfRunning()
-        FaceRtmStreamPublisher.clearAllFacesIfRunning()
         runWithEphemeralRegistrationDetector(context) { fd ->
             runCatching {
                 val im = fd.multiPersonRecognitionManager?.getIdentityManager()
