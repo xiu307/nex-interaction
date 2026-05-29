@@ -477,6 +477,21 @@
                     tools:itemCount="2"
                     tools:listitem="@layout/item_voice_print_float"
                     tools:visibility="visible" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVpDelUpMock"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="6dp"
+                    android:layout_marginTop="2dp"
+                    android:minHeight="0dp"
+                    android:paddingVertical="2dp"
+                    android:text="@string/agent_chat_voice_print_mock_del_up"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="10sp"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

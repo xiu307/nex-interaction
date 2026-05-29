@@ -9,6 +9,10 @@ object VoicePrintRtmProtocol {
     const val TYPE_VP_REGISTER_DOWN = "VP_REGISTER_DOWN"
     const val TYPE_VP_DEL_UP = "VP_DEL_UP"
 
+    /** 单点测试用固定样例（来自历史 VP_REGISTER_DOWN / VP_DEL_UP 日志）。 */
+    const val MOCK_REGISTER_UUID = "8e40ea93-fa43-4a7f-bdb1-8c3ae8a6756c"
+    const val MOCK_SPEAKER_ID = "318679079723208704"
+
     data class VpRegisterDownSpeaker(
         val registerUuid: String,
         val rtcUid: String,

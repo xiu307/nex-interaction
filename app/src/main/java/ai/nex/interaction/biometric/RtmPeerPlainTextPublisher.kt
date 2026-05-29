@@ -6,20 +6,22 @@ import io.agora.rtm.ResultCallback
 import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConstants
 
-/** RTM Message Channel（与 [ai.conv.core.convoai.ConversationalAIAPIImpl.subscribeMessage] 同频道名）。 */
-object RtmMessageChannelPublisher {
+/**
+ * USER 点对点 RTM 文本消息（与历史 FaceInfo `ROBOT_FACE_INFO_UP` 一致）。
+ */
+object RtmPeerPlainTextPublisher {
 
     fun publish(
         client: RtmClient,
-        channelName: String,
+        peerUserId: String,
         message: String,
         callback: (Exception?) -> Unit,
     ) {
         val options = PublishOptions().apply {
-            setChannelType(RtmConstants.RtmChannelType.MESSAGE)
+            setChannelType(RtmConstants.RtmChannelType.USER)
             customType = "PlainText"
         }
-        client.publish(channelName, message, options, object : ResultCallback<Void> {
+        client.publish(peerUserId, message, options, object : ResultCallback<Void> {
             override fun onSuccess(responseInfo: Void?) {
                 callback(null)
             }

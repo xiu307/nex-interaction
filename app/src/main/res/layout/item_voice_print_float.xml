@@ -35,21 +35,6 @@
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnVpConfirm"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:text="@string/agent_chat_voice_print_add"
-            android:textColor="@color/accent_blue"
-            android:textSize="10sp"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnVpDelete"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"

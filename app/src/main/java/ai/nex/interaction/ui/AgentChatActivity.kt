@@ -26,7 +26,6 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import ai.nex.interaction.R
 import ai.nex.interaction.biometric.BiometricSalRegistry
-import ai.nex.interaction.biometric.VpSpeakerStatus
 import ai.nex.interaction.biometric.VpSpeakerUiItem
 import ai.conv.core.net.repository.AgentRepository
 import ai.nex.interaction.tts.TTSManager
@@ -132,6 +131,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             tvVoicePrintFloatTitle.isVisible = expanded
             tvVoicePrintFloatEmpty.isVisible = expanded && empty
             rvVoicePrintFloat.isVisible = expanded && !empty
+            btnVpDelUpMock.isVisible = expanded
             val panelW = if (expanded) {
                 resources.getDimensionPixelSize(R.dimen.rtm_float_expanded_width)
             } else {
@@ -153,10 +153,9 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             if (::voicePrintFloatAdapter.isInitialized) {
                 voicePrintFloatAdapter.submitList(list)
             }
-            val pendingCount = list.count { it.status == VpSpeakerStatus.PENDING }
-            if (pendingCount > 0) {
+            if (list.isNotEmpty()) {
                 tvVoicePrintFloatBadge.isVisible = true
-                tvVoicePrintFloatBadge.text = pendingCount.coerceAtMost(99).toString()
+                tvVoicePrintFloatBadge.text = list.size.coerceAtMost(99).toString()
             } else {
                 tvVoicePrintFloatBadge.isVisible = false
             }
@@ -180,22 +179,13 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         }
     }
 
-    private fun confirmVoicePrintItem(item: VpSpeakerUiItem) {
-        if (viewModel.confirmVpSpeaker(item.speakerId)) {
-            Toast.makeText(this, R.string.agent_chat_voice_print_confirm_ok, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun confirmDeleteVoicePrintItem(item: VpSpeakerUiItem) {
         AlertDialog.Builder(this)
             .setTitle(R.string.agent_chat_voice_print_delete_title)
             .setMessage(R.string.agent_chat_voice_print_delete_message)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.agent_chat_voice_print_delete) { _, _ ->
-                viewModel.deleteVpSpeaker(
-                    speakerId = item.speakerId,
-                    fromPending = item.status == VpSpeakerStatus.PENDING,
-                ) { ok, msg ->
+                viewModel.deleteVpSpeaker(speakerId = item.speakerId) { ok, msg ->
                     runOnUiThread {
                         if (ok) {
                             Toast.makeText(this, R.string.agent_chat_voice_print_delete_ok, Toast.LENGTH_SHORT).show()
@@ -210,6 +200,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 }
             }
             .show()
+    }
+
+    private fun sendMockVpDelUp() {
+        viewModel.sendMockVpDelUp { ok, msg ->
+            runOnUiThread {
+                val text = if (ok) {
+                    getString(R.string.agent_chat_voice_print_mock_del_up_ok)
+                } else {
+                    getString(R.string.agent_chat_voice_print_mock_del_up_failed, msg ?: "unknown")
+                }
+                Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun toggleVideoInput() {
@@ -380,7 +383,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             }
 
             voicePrintFloatAdapter = VoicePrintFloatAdapter(
-                onConfirm = { item -> confirmVoicePrintItem(item) },
                 onDelete = { item -> confirmDeleteVoicePrintItem(item) },
             )
             rvVoicePrintFloat.layoutManager = LinearLayoutManager(this@AgentChatActivity)
@@ -388,6 +390,7 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             ivVoicePrintFloatIcon.setOnClickListener {
                 toggleVoicePrintFloatExpanded()
             }
+            btnVpDelUpMock.setOnClickListener { sendMockVpDelUp() }
             isVoicePrintFloatExpanded = false
             applyVoicePrintFloatExpandedState()
             applyVoicePrintFloatList(viewModel.vpSpeakerList.value)

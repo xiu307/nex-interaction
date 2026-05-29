@@ -29,7 +29,7 @@ data class VpSalSpeakerRecord(
     val sampleUrl: String,
 )
 
-/** 待用户确认的声纹（`VP_REGISTER_DOWN` 先入 pending，用户点「添加」后进 active）。 */
+/** 历史 pending 队列（对话页已改为 `VP_REGISTER_DOWN` 直接落 active；保留供删除回退查询）。 */
 data class VpPendingSpeakerRecord(
     val registerUuid: String,
     val speakerId: String,
@@ -211,18 +211,8 @@ object BiometricSalRegistry {
     fun listActiveVpSpeakers(): List<VpSalSpeakerRecord> =
         loadVpSalSpeakers().values.sortedBy { it.speakerId }
 
-    fun buildVpSpeakerUiList(): List<VpSpeakerUiItem> {
-        val pending = listPendingVpSpeakers().map {
-            VpSpeakerUiItem(
-                speakerId = it.speakerId,
-                registerUuid = it.registerUuid,
-                rtcUid = it.rtcUid,
-                sampleUrl = it.sampleUrl,
-                status = VpSpeakerStatus.PENDING,
-                receivedAtEpochMs = it.receivedAtEpochMs,
-            )
-        }
-        val active = listActiveVpSpeakers().map {
+    fun buildVpSpeakerUiList(): List<VpSpeakerUiItem> =
+        listActiveVpSpeakers().map {
             VpSpeakerUiItem(
                 speakerId = it.speakerId,
                 registerUuid = it.registerUuid,
@@ -231,8 +221,6 @@ object BiometricSalRegistry {
                 status = VpSpeakerStatus.ACTIVE,
             )
         }
-        return pending + active
-    }
 
     fun confirmPendingVpSpeaker(speakerId: String): Boolean {
         if (speakerId.isEmpty()) return false

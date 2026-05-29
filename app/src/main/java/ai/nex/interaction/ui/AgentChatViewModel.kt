@@ -39,7 +39,6 @@ import ai.nex.interaction.biometric.BiometricSalRegistry
 import ai.nex.interaction.biometric.VoicePrintRtmCoordinator
 import ai.nex.interaction.biometric.VoicePrintRtmProtocol
 import ai.nex.interaction.biometric.VoicePrintRtmSession
-import ai.nex.interaction.biometric.VpSpeakerStatus
 import ai.nex.interaction.biometric.VpSpeakerUiItem
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
@@ -223,18 +222,23 @@ class AgentChatViewModel : ViewModel() {
         }
 
         override fun onGeelyRtmMessage(message: Map<String, Any>) {
-            if (message["type"]?.toString() != VoicePrintRtmProtocol.TYPE_VP_REGISTER_DOWN) return
+            val msgType = message["type"]?.toString().orEmpty()
+            Log.i(
+                VoicePrintRtmCoordinator.LOG_TAG,
+                "geely_rtm_server downlink type=$msgType payload=$message",
+            )
+            if (msgType != VoicePrintRtmProtocol.TYPE_VP_REGISTER_DOWN) return
             val speakers = VoicePrintRtmProtocol.parseVpRegisterDownSpeakers(message)
-            val saved = BiometricSalRegistry.saveVpRegisterDownPending(
+            val saved = BiometricSalRegistry.saveVpRegisterDownSpeakers(
                 speakers = speakers,
                 localRtcUids = buildLocalRtcUidSet(),
             )
             if (saved <= 0) {
-                addStatusLog("VP_REGISTER_DOWN: no pending speaker for local rtc_uid=${buildLocalRtcUidSet()}")
+                addStatusLog("VP_REGISTER_DOWN: no speaker saved for local rtc_uid=${buildLocalRtcUidSet()}")
                 return
             }
             refreshVpSpeakerList()
-            addStatusLog("VP_REGISTER_DOWN: $saved speaker(s), confirm or delete in voice print float")
+            addStatusLog("VP_REGISTER_DOWN: $saved speaker(s) auto-added, delete in voice print float if needed")
         }
     }
 
@@ -860,15 +864,18 @@ class AgentChatViewModel : ViewModel() {
         _vpSpeakerList.value = BiometricSalRegistry.buildVpSpeakerUiList()
     }
 
-    /** 添加：协议无上行，服务端已在 VP_REGISTER_DOWN 前完成 add_sal_speakers，仅本地确认。 */
-    fun confirmVpSpeaker(speakerId: String): Boolean {
-        if (!BiometricSalRegistry.confirmPendingVpSpeaker(speakerId)) return false
-        refreshVpSpeakerList()
-        addStatusLog("Voice print confirmed locally: speakerId=$speakerId")
-        return true
+    fun sendMockVpDelUp(onDone: (Boolean, String?) -> Unit) {
+        VoicePrintRtmCoordinator.trySendMockVpDelUp { ok, msg ->
+            if (ok) {
+                addStatusLog("VP_DEL_UP mock sent (see VoicePrintRtm logcat for json)")
+            } else {
+                addStatusLog("VP_DEL_UP mock failed: ${msg ?: "unknown"}")
+            }
+            onDone(ok, msg)
+        }
     }
 
-    fun deleteVpSpeaker(speakerId: String, fromPending: Boolean, onDone: (Boolean, String?) -> Unit) {
+    fun deleteVpSpeaker(speakerId: String, onDone: (Boolean, String?) -> Unit) {
         if (speakerId.isEmpty()) {
             onDone(false, "empty speakerId")
             return
@@ -879,17 +886,11 @@ class AgentChatViewModel : ViewModel() {
                 onDone(false, msg)
                 return@trySendVpDelUp
             }
-            if (fromPending) {
-                BiometricSalRegistry.removePendingVpSpeaker(speakerId)
-            } else {
-                BiometricSalRegistry.removeVpSalSpeaker(speakerId)
-            }
+            BiometricSalRegistry.removeVpSalSpeaker(speakerId)
+            BiometricSalRegistry.removePendingVpSpeaker(speakerId)
             refreshVpSpeakerList()
             addStatusLog("Voice print deleted: speakerId=$speakerId (VP_DEL_UP sent)")
             onDone(true, null)
         }
     }
-
-    fun pendingVpSpeakerCount(): Int =
-        _vpSpeakerList.value.count { it.status == VpSpeakerStatus.PENDING }
 }
