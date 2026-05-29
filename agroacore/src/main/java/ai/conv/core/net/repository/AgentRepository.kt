@@ -249,7 +249,7 @@ object AgentRepository {
         lockingSessionsFromUids: Map<String, String>,
     ): JSONObject {
         val labelUserIdStr = labelUserId.toString()
-        val useLockingSal = runtimeSalSampleUrls.isNotEmpty()
+        val useLockingSal = true //runtimeSalSampleUrls.isNotEmpty()
         val primaryRtcUid = lockingSessionsFromUids.values.firstOrNull()
             ?: remoteRtcUids.firstOrNull()
             ?: labelUserIdStr
