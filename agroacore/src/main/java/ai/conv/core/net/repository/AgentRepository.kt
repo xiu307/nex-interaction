@@ -12,11 +12,23 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** 运行时向 Agent 追加 SAL 说话人（[AgentRepository.addSalSpeakersAsync]）。 */
+data class SalSpeakerAddRequest(
+    val uid: String,
+    val registerUuid: String,
+    val speakerId: String,
+    val sampleUrl: String,
+)
+
+/** 运行时从 Agent 移除 SAL 说话人（[AgentRepository.deleteSalSpeakersAsync]）。 */
+data class SalSpeakerDeleteRequest(
+    val registerUuid: String,
+    val speakerId: String,
+)
+
 object AgentRepository {
     private const val TAG = "AgentRepository"
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
-    private const val SAL_LAB_SPEAKER1_ID = "shengwang_speaker1_zlm"
-    private const val SAL_LAB_SPEAKER2_ID = "shengwang_speaker2_lzc"
     private const val START_OF_SPEECH_MODE_DISABLED = "disabled"
     private const val START_OF_SPEECH_DISABLED_STRATEGY_IGNORE = "ignore"
 
@@ -34,12 +46,12 @@ object AgentRepository {
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
+        /** speaker_id -> rtc uid，对应 join 体 `more_sal_config.locking_sessions_from_uids`。 */
+        lockingSessionsFromUids: Map<String, String> = emptyMap(),
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "startAgentAsync begin channel=$channelName remoteRtcUids=$remoteRtcUids")
-            val url =
-                if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
-                else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
+            val url = joinUrl()
             val requestBody = buildJsonPayload(
                 name = channelName,
                 channel = channelName,
@@ -49,12 +61,10 @@ object AgentRepository {
                 remoteRtcUids = remoteRtcUids,
                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+                lockingSessionsFromUids = lockingSessionsFromUids,
             )
 
-            val request = Request.Builder().url(url).addHeader("Content-Type", JSON_MEDIA_TYPE)
-                .addHeader("Authorization", "agora token=$authToken")
-                .post(requestBody.toString().toRequestBody(JSON_MEDIA_TYPE.toMediaType())).build()
-
+            val request = buildAgentPostRequest(url, authToken, requestBody.toString())
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string()
@@ -63,11 +73,13 @@ object AgentRepository {
 
             val body = response.body?.string()
                 ?: throw RuntimeException("Start agent response body is null")
-            val bodyJson = JSONObject(body)
-            val agentId = bodyJson.optString("agent_id", "")
+            val agentId = parseAgentIdFromJoinResponse(body)
             if (agentId.isBlank()) {
-                throw RuntimeException("Failed to parse agentId from response: $body")
+                throw RuntimeException(
+                    "Join 返回无 agent_id（AppId 未换时请让后台查 join 日志与 body 内 LLM/回调 URL）: $body",
+                )
             }
+            Log.i(TAG, "startAgentAsync ok agentId=$agentId")
             Result.success(agentId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -81,10 +93,9 @@ object AgentRepository {
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
+        lockingSessionsFromUids: Map<String, String> = emptyMap(),
     ): String {
-        val url =
-            if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/join"
-            else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/join"
+        val url = joinUrl()
         val body = buildJsonPayload(
             name = channelName,
             channel = channelName,
@@ -94,15 +105,136 @@ object AgentRepository {
             remoteRtcUids = remoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+            lockingSessionsFromUids = lockingSessionsFromUids,
         )
         return JSONObject().apply {
             put("url", url)
-            put("headers", JSONObject().apply {
-                put("Content-Type", JSON_MEDIA_TYPE)
-                put("Authorization", "agora token=<authToken>")
-            })
+            put("headers", buildApiHeadersJson(authToken = "<authToken>"))
             put("body", body)
         }.toString(2)
+    }
+
+    suspend fun addSalSpeakersAsync(
+        agentId: String,
+        authToken: String,
+        speakers: List<SalSpeakerAddRequest>,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        postSalSpeakersMutation(
+            url = "${ConvoConfig.agentRestBaseUrl()}/${ConvoConfig.APP_ID}/agents/$agentId/add_sal_speakers",
+            authToken = authToken,
+            body = JSONObject().apply {
+                put(
+                    "speakers",
+                    JSONArray().apply {
+                        speakers.forEach { s ->
+                            put(
+                                JSONObject().apply {
+                                    put("uid", s.uid)
+                                    put("register_uuid", s.registerUuid)
+                                    put("speaker_id", s.speakerId)
+                                    put("sample_url", s.sampleUrl)
+                                },
+                            )
+                        }
+                    },
+                )
+            },
+            opName = "add_sal_speakers",
+        )
+    }
+
+    suspend fun deleteSalSpeakersAsync(
+        agentId: String,
+        authToken: String,
+        speakers: List<SalSpeakerDeleteRequest>,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        postSalSpeakersMutation(
+            url = "${ConvoConfig.agentRestBaseUrl()}/${ConvoConfig.APP_ID}/agents/$agentId/delete_sal_speakers",
+            authToken = authToken,
+            body = JSONObject().apply {
+                put(
+                    "speakers",
+                    JSONArray().apply {
+                        speakers.forEach { s ->
+                            put(
+                                JSONObject().apply {
+                                    put("register_uuid", s.registerUuid)
+                                    put("speaker_id", s.speakerId)
+                                },
+                            )
+                        }
+                    },
+                )
+            },
+            opName = "delete_sal_speakers",
+        )
+    }
+
+    private suspend fun postSalSpeakersMutation(
+        url: String,
+        authToken: String,
+        body: JSONObject,
+        opName: String,
+    ): Result<Unit> = try {
+        val request = buildAgentPostRequest(url, authToken, body.toString())
+        val response = okHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) {
+            val errorBody = response.body?.string()
+            throw RuntimeException("$opName error: httpCode=${response.code}, httpMsg=$errorBody")
+        }
+        response.body?.close()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /**
+     * 吉利新网关 join 响应：常见为顶层 `agent_id`，也可能在 `data` 内。
+     */
+    private fun parseAgentIdFromJoinResponse(body: String): String {
+        if (body.isBlank()) return ""
+        return try {
+            val root = JSONObject(body)
+            sequenceOf(
+                root.optString("agent_id", ""),
+                root.optJSONObject("data")?.optString("agent_id", "").orEmpty(),
+                root.optJSONObject("data")?.optString("task_id", "").orEmpty(),
+                root.optString("task_id", ""),
+                root.optString("id", ""),
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun joinUrl(): String =
+        "${ConvoConfig.agentRestBaseUrl()}/${ConvoConfig.APP_ID}/join"
+
+    private fun leaveUrl(agentId: String): String =
+        "${ConvoConfig.agentRestBaseUrl()}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
+
+    private fun buildAgentPostRequest(url: String, authToken: String, jsonBody: String): Request =
+        Request.Builder()
+            .url(url)
+            .apply { applyAgentApiHeaders(authToken) }
+            .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE.toMediaType()))
+            .build()
+
+    private fun Request.Builder.applyAgentApiHeaders(authToken: String): Request.Builder {
+        addHeader("Content-Type", JSON_MEDIA_TYPE)
+        addHeader("Authorization", "agora token=$authToken")
+        if (ConvoConfig.USE_GEELY_MULTI_API && ConvoConfig.SERVICE_NAMESPACE.isNotEmpty()) {
+            addHeader("X-Service-Namespace", ConvoConfig.SERVICE_NAMESPACE)
+        }
+        return this
+    }
+
+    private fun buildApiHeadersJson(authToken: String): JSONObject = JSONObject().apply {
+        put("Content-Type", JSON_MEDIA_TYPE)
+        put("Authorization", "agora token=$authToken")
+        if (ConvoConfig.USE_GEELY_MULTI_API && ConvoConfig.SERVICE_NAMESPACE.isNotEmpty()) {
+            put("X-Service-Namespace", ConvoConfig.SERVICE_NAMESPACE)
+        }
     }
 
     private fun buildJsonPayload(
@@ -114,17 +246,20 @@ object AgentRepository {
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
+        lockingSessionsFromUids: Map<String, String>,
     ): JSONObject {
         val labelUserIdStr = labelUserId.toString()
+        val useLockingSal = runtimeSalSampleUrls.isNotEmpty()
+        val primaryRtcUid = lockingSessionsFromUids.values.firstOrNull()
+            ?: remoteRtcUids.firstOrNull()
+            ?: labelUserIdStr
+
         return JSONObject().apply {
             put("name", name)
             put("properties", JSONObject().apply {
                 put("channel", channel)
                 put("token", token)
                 put("agent_rtc_uid", agentRtcUid)
-                // Multi-user sessions can contain RTC UIDs outside the locally assembled list
-                // (e.g. dynamic joins / partial local registry state). Use wildcard subscription
-                // to avoid dropping ASR for users not present in remoteRtcUids.
                 put("remote_rtc_uids", JSONArray().apply { put("*") })
                 put("enable_string_uid", false)
                 put("idle_timeout", 120)
@@ -140,15 +275,16 @@ object AgentRepository {
                 put("llm", buildLlmJson(labelUserId))
                 put("tts", buildTtsJson())
                 put("sal", JSONObject().apply {
-                    if (runtimeSalSampleUrls.isEmpty())  put("sal_mode", "pre_register")
-                    else {
+                    if (!useLockingSal) {
+                        put("sal_mode", "pre_register")
+                    } else {
                         put("sal_mode", "locking")
                         put(
-                            "sample_urls", buildSalSampleUrlsJson(
-                                uidStr = labelUserIdStr,
+                            "sample_urls",
+                            buildSalSampleUrlsJson(
                                 runtimeSalSampleUrls = runtimeSalSampleUrls,
                                 hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
-                            )
+                            ),
                         )
                     }
                 })
@@ -158,31 +294,22 @@ object AgentRepository {
                     put("enable_flexible", true)
                     put("enable_error_message", true)
                     put("enable_dump", true)
-//                    是否是多路声纹
-//                    put("cascading_graph", "v1_soseos_multi_user")
-                    put("main", JSONObject().apply {
-                        put("interrupt_check", JSONObject().apply {
-                            put("enabled", true)
-                            put("timeout_seconds", 5)
-                            put("url", ConvoConfig.INTERRUPT_CHECK_URL)
-                            put("api_key", ConvoConfig.LLM_API_KEY)
-                            put("labels", JSONObject()
-                                .put("userName", labelUserIdStr)
-                                .apply {
-                                    if (ConvoConfig.IS_GLASS_SCENARIO) {
-                                        put("channelCode", "1_jowneyTestDevice")
-                                    }
-                                })
+                    put("main", buildMainParametersJson(labelUserIdStr))
+                    if (ConvoConfig.USE_GEELY_MULTI_API && useLockingSal) {
+                        put(
+                            "more_sal_config",
+                            buildMoreSalConfigJson(
+                                lockingSessionsFromUids = lockingSessionsFromUids,
+                                runtimeSalSampleUrls = runtimeSalSampleUrls,
+                                primaryRtcUid = primaryRtcUid,
+                            ),
+                        )
+                    }
+                    if (ConvoConfig.USE_GEELY_MULTI_API) {
+                        put("turn_detector", JSONObject().apply {
+                            put("disable_interrupt", true)
                         })
-                        put("pre_register", JSONObject().apply {
-                            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                            put("api_key", ConvoConfig.LLM_API_KEY)
-                            put("callback_timeout_seconds", 5.0)
-                            put("upload_result_timeout_seconds", 10.0)
-                            put("callback_max_retries", 5)
-                            put("temp_dir", "/tmp/convoai_pre_register")
-                        })
-                    })
+                    }
                     put("audio3a_downstream", JSONObject().apply {
                         put("enable_ans", false)
                         put("passthrough", true)
@@ -235,19 +362,85 @@ object AgentRepository {
         }
     }
 
+    private fun buildMainParametersJson(labelUserIdStr: String): JSONObject = JSONObject().apply {
+        put("interrupt_check", JSONObject().apply {
+            put("enabled", true)
+            put("url", ConvoConfig.INTERRUPT_CHECK_URL)
+            put("api_key", ConvoConfig.LLM_API_KEY)
+            if (ConvoConfig.USE_GEELY_MULTI_API) {
+                put("timeout_ms", ConvoConfig.INTERRUPT_CHECK_TIMEOUT_MS)
+            } else {
+                put("timeout_seconds", 5)
+            }
+            put("labels", JSONObject().put("userName", labelUserIdStr).apply {
+                if (ConvoConfig.IS_GLASS_SCENARIO) {
+                    put("channelCode", "1_jowneyTestDevice")
+                }
+            })
+        })
+        if (ConvoConfig.USE_GEELY_MULTI_API) {
+            put("register", JSONObject().apply {
+                put("enable", true)
+                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                put("api_key", ConvoConfig.LLM_API_KEY)
+                put("callback_timeout_seconds", 5.0)
+                put("upload_result_timeout_seconds", 10.0)
+                put("callback_max_retries", 5)
+                put("gate_timeout_seconds", ConvoConfig.REGISTER_GATE_TIMEOUT_SECONDS)
+                put("temp_dir", "/tmp/convoai_register")
+            })
+        } else {
+            put("pre_register", JSONObject().apply {
+                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+                put("api_key", ConvoConfig.LLM_API_KEY)
+                put("callback_timeout_seconds", 5.0)
+                put("upload_result_timeout_seconds", 10.0)
+                put("callback_max_retries", 5)
+                put("temp_dir", "/tmp/convoai_pre_register")
+            })
+        }
+    }
+
+    private fun buildMoreSalConfigJson(
+        lockingSessionsFromUids: Map<String, String>,
+        runtimeSalSampleUrls: Map<String, String>,
+        primaryRtcUid: String,
+    ): JSONObject {
+        val sessions = JSONObject()
+        val effectiveBindings = if (lockingSessionsFromUids.isNotEmpty()) {
+            lockingSessionsFromUids
+        } else {
+            runtimeSalSampleUrls.keys.associateWith { primaryRtcUid }
+        }
+        effectiveBindings.forEach { (speakerId, uid) ->
+            if (speakerId.isNotEmpty() && uid.isNotEmpty()) {
+                sessions.put(speakerId, uid)
+            }
+        }
+        val registerUids = JSONArray().apply { put(primaryRtcUid) }
+        return JSONObject().apply {
+            put("locking_sessions_from_uids", sessions)
+            put("register_session_count", 1)
+            put("register_session_uids", registerUids)
+            put("negative_locking_session_count", 1)
+            put("negative_locking_session_uids", JSONArray().apply { put(primaryRtcUid) })
+            put("max_session_count", ConvoConfig.SAL_MAX_SESSION_COUNT)
+        }
+    }
+
     private fun buildSalSampleUrlsJson(
-        uidStr: String,
         runtimeSalSampleUrls: Map<String, String>,
         hasIncompleteLocalRegistration: Boolean,
     ): JSONObject {
         Log.i(
             TAG,
-            "SAL: runtime sample_urls size=${runtimeSalSampleUrls.size} keys=${runtimeSalSampleUrls.keys}"
+            "SAL: runtime sample_urls size=${runtimeSalSampleUrls.size} keys=${runtimeSalSampleUrls.keys}",
         )
         if (runtimeSalSampleUrls.isEmpty() && hasIncompleteLocalRegistration) {
             Log.w(
                 TAG,
-                "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" + "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。"
+                "SAL: 本地有人脸/声纹记录，但 sample_urls 仅在 PCM 为 http(s) 且 face URL 非空时才会带上；" +
+                    "若 PCM 仍是 local:// 或未上传 OSS，云端 SAL 无法用你的注册声纹，只会用 env 预注册或实验室默认 PCM。",
             )
         }
 
@@ -257,7 +450,6 @@ object AgentRepository {
                 out.put(faceId, pcmUrl)
             }
         }
-
         return out
     }
 
@@ -289,7 +481,7 @@ object AgentRepository {
         put("greeting_message", JSONObject.NULL)
         put("params", buildLlmParamsJson(userNameForLabels))
         put("style", JSONObject.NULL)
-        ConvoConfig.LLM_MAX_HISTORY.toIntOrNull()?.let { put("max_history", it) }
+        ConvoConfig.effectiveLlmMaxHistory().toIntOrNull()?.let { put("max_history", it) }
             ?: put("max_history", JSONObject.NULL)
         put("ignore_empty", JSONObject.NULL)
         put("input_modalities", JSONArray().apply {
@@ -345,16 +537,11 @@ object AgentRepository {
     }
 
     suspend fun stopAgentAsync(
-        agentId: String, authToken: String
+        agentId: String,
+        authToken: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val url =
-                if (ConvoConfig.USE_PRIVATE_ENV) "${ConvoConfig.PRIVATE_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
-                else "${ConvoConfig.PUBLIC_BASE_URL}/${ConvoConfig.APP_ID}/agents/$agentId/leave"
-            val request =
-                Request.Builder().url(url).addHeader("Authorization", "agora token=$authToken")
-                    .post("".toRequestBody(JSON_MEDIA_TYPE.toMediaType())).build()
-
+            val request = buildAgentPostRequest(leaveUrl(agentId), authToken, "")
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string()

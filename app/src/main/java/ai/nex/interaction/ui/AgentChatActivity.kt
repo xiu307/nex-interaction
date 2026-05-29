@@ -528,14 +528,20 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         val runtimeSalSampleUrls = BiometricSalRegistry.getRuntimeSalSampleUrlsForAgent()
         val hasIncompleteLocalRegistration =
             BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
+        val remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum)
+            .map { it.toString() }
+        val primaryRtcUid = remoteRtcUids.firstOrNull()
+            ?: AgentChatViewModel.userId.toString()
+        val lockingSessionsFromUids =
+            BiometricSalRegistry.getLockingSessionsFromUids(primaryRtcUid)
         val content = AgentRepository.buildStartAgentConfigPreview(
             channelName = channel,
             agentRtcUid = AgentChatViewModel.agentUid.toString(),
             labelUserId = AgentChatViewModel.userId.toLong(),
-            remoteRtcUids = (AgentChatViewModel.userId until AgentChatViewModel.userId + totalUserNum)
-                .map { it.toString() },
+            remoteRtcUids = remoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+            lockingSessionsFromUids = lockingSessionsFromUids,
         )
         val textView = androidx.appcompat.widget.AppCompatTextView(this).apply {
             text = content

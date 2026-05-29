@@ -156,6 +156,17 @@ object BiometricSalRegistry {
         return base
     }
 
+    /**
+     * 吉利多人 join：`more_sal_config.locking_sessions_from_uids`（speaker_id -> rtc uid）。
+     */
+    fun getLockingSessionsFromUids(fallbackRtcUid: String): Map<String, String> {
+        val sampleUrls = getRuntimeSalSampleUrlsForAgent()
+        if (sampleUrls.isEmpty()) return emptyMap()
+        return sampleUrls.keys.associateWith { speakerId ->
+            resolveUserIdByFaceId(speakerId)?.takeIf { it.isNotEmpty() } ?: fallbackRtcUid
+        }
+    }
+
     fun getAllStoredPersonRows(): List<BiometricStoredPersonRow> {
         val pcmMap = loadMap()
         val snapshotMap = loadRegistrationSnapshotMap()

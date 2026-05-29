@@ -25,6 +25,7 @@ object ConversationAgentRestCoordinator {
         remoteRtcUids: List<String>,
         runtimeSalSampleUrls: Map<String, String> = emptyMap(),
         hasIncompleteLocalRegistration: Boolean = false,
+        lockingSessionsFromUids: Map<String, String> = emptyMap(),
     ): Result<AgentStartOutcome> {
         val tokenResult = TokenGenerator.generateTokensAsync(
             channelName = channelName,
@@ -40,6 +41,7 @@ object ConversationAgentRestCoordinator {
             remoteRtcUids = remoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+            lockingSessionsFromUids = lockingSessionsFromUids,
         )
         return startResult.map { agentId ->
             AgentStartOutcome(agentId = agentId, channelScopedToken = token)

@@ -468,6 +468,10 @@ class AgentChatViewModel : ViewModel() {
         val runtimeSalSampleUrls = BiometricSalRegistry.getRuntimeSalSampleUrlsForAgent()
         val hasIncompleteLocalRegistration =
             BiometricSalRegistry.hasLocalRegistrationButNoHttpSalPair()
+        val primaryRtcUid = joinedRemoteRtcUids.firstOrNull()
+            ?: ConversationSessionIdentity.userId.toString()
+        val lockingSessionsFromUids =
+            BiometricSalRegistry.getLockingSessionsFromUids(primaryRtcUid)
         val startResult = ConversationAgentRestCoordinator.startRemoteAgent(
             channelName = connection.channelName,
             agentRtcUid = currentAgentUid.toString(),
@@ -475,6 +479,7 @@ class AgentChatViewModel : ViewModel() {
             remoteRtcUids = joinedRemoteRtcUids,
             runtimeSalSampleUrls = runtimeSalSampleUrls,
             hasIncompleteLocalRegistration = hasIncompleteLocalRegistration,
+            lockingSessionsFromUids = lockingSessionsFromUids,
         )
         startResult.fold(
             onSuccess = { outcome ->

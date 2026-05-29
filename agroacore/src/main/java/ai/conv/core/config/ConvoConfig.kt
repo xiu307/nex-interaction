@@ -10,12 +10,36 @@ package ai.conv.core.config
  * 必要配置。
  */
 object ConvoConfig {
+    /** 声网 AppId（与旧环境相同；换后台仅改 join 网关 URL，不换 AppId） */
     const val APP_ID: String = "e9e7cafd870849b292c731d4bab44306"
     const val APP_CERTIFICATE: String = "58bccff9667c4d6f863b938a30c95d40"
 
+    /** 吉利业务服务（LLM / TTS / 拒识 / 注册回调），与 join 网关域名不同 */
     const val GEELY_PRIVATE_IP = "47.96.173.253"
 
+    /** 旧内网 Agent 网关（:9090）；新多人方案请保持 false，走 [GEELY_MULTI_BASE_URL] */
     const val USE_PRIVATE_ENV: Boolean = false
+
+    /**
+     * 吉利多人对话 REST（PDF 20260528）：api-test + [SERVICE_NAMESPACE]。
+     * join/leave/add_sal_speakers 走此网关；勿与 [PRIVATE_BASE_URL]（旧 :9090）混用。
+     */
+    const val USE_GEELY_MULTI_API: Boolean = true
+
+    const val GEELY_MULTI_BASE_URL: String =
+        "https://api-test.agora.io/hzacsdev01t-ctel/api/conversational-ai-agent/v2/projects"
+
+    /** join / leave / add_sal_speakers 等 REST 必填 Header（PDF: jili-test） */
+    const val SERVICE_NAMESPACE: String = "jili-test"
+
+    const val INTERRUPT_CHECK_TIMEOUT_MS: Int = 3500
+
+    const val REGISTER_GATE_TIMEOUT_SECONDS: Double = 30.0
+
+    const val SAL_MAX_SESSION_COUNT: Int = 20
+
+    /** 多人场景：LLM 不带上下文，由吉利侧维护 */
+    const val LLM_MAX_HISTORY_GEELY_MULTI: String = "1"
 
     /** 是否为眼镜场景,默认 false非眼镜业务场景,可通过 ConvoManagerConfig 动态修改 */
     @JvmField
@@ -59,6 +83,16 @@ object ConvoConfig {
     const val PRIVATE_DOMAIN_LIST = "ap.1405669.agora.local"
     const val PRIVATE_BASE_URL = "http://${GEELY_PRIVATE_IP}:9090/api/conversational-ai-agent/v2/projects"
     const val PUBLIC_BASE_URL = "https://api.agora.io/cn/api/conversational-ai-agent/v2/projects"
+
+    /** Agent REST（join / leave / sal 管理）根路径，不含 trailing slash。 */
+    fun agentRestBaseUrl(): String = when {
+        USE_PRIVATE_ENV -> PRIVATE_BASE_URL
+        USE_GEELY_MULTI_API -> GEELY_MULTI_BASE_URL
+        else -> PUBLIC_BASE_URL
+    }
+
+    fun effectiveLlmMaxHistory(): String =
+        if (USE_GEELY_MULTI_API) LLM_MAX_HISTORY_GEELY_MULTI else LLM_MAX_HISTORY
 
     /** 阿里云 OSS 上传凭证；勿提交真实值，本地或 CI 注入 */
     const val STT_UPLOADER_KEY: String = ""

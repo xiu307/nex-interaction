@@ -134,6 +134,7 @@ cd conversational-ai-quickstart-native/android-kotlin
 
 ## 关键文件
 
+- [`docs/GEELY_MULTI_API.md`](docs/GEELY_MULTI_API.md)：吉利多人对话 API 端侧配置、环境切换、join body 与联调说明
 - `docs/AGROACORE_SDK.md`：`agroacore` SDK 的定位、能力边界与接入说明
 - `AgentChatActivity.kt`：主界面，包含日志显示、Agent 状态指示器、聊天气泡转录列表和控制按钮
 - `AgentChatViewModel.kt`：业务逻辑层，包含 RTC 引擎、RTM 客户端的管理和 Agent 启动逻辑

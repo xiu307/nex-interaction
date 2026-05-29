@@ -255,6 +255,7 @@ To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`. St
 | AGENTS.md | AI Agent development guidelines and project constraints |
 | ARCHITECTURE.md | Technical architecture details (data flows, threading, lifecycle) |
 | README.md | Quick start and usage guide (Chinese) |
+| docs/GEELY_MULTI_API.md | Geely multi-party API client configuration, env switching, and integration guide |
 | docs/WORKFLOW_TEMPLATES.md | Workflow entry, routing, and acceptance templates for feat/fix/refactor/chore/docs tasks |
 | docs/PROJECT_STATE_TEMPLATE.md | Template for the local `PROJECT_STATE.md` memory file maintained during workflow execution |
 | docs/REVIEW_TEMPLATES.md | Review criteria and phase/status output conventions for code and docs tasks |
