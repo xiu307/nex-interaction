@@ -256,8 +256,7 @@ class AgentChatViewModel : ViewModel() {
                 addStatusLog("VP_REGISTER_DOWN: no speaker for local rtc_uid=${buildLocalRtcUidSet()}")
                 return
             }
-            addStatusLog("VP_REGISTER_DOWN: saved $added speaker(s), restarting agent…")
-            scheduleRestartAgentAfterVoicePrintSal()
+            addStatusLog("VP_REGISTER_DOWN: saved $added speaker(s), locking mode — no agent restart")
         }
     }
 
@@ -276,8 +275,7 @@ class AgentChatViewModel : ViewModel() {
                     },
                     onVoicePrintRegisterPcmHttpUrl = { url ->
                         BiometricSalRegistry.saveVoicePrintRegisterSalPcmUrl(url)
-                        addStatusLog("Voice print SAL PCM URL saved (key=${BiometricSalRegistry.VOICE_PRINT_SAL_SAMPLE_KEY})")
-                        scheduleRestartAgentAfterVoicePrintSal()
+                        addStatusLog("Voice print SAL PCM URL saved (key=${BiometricSalRegistry.VOICE_PRINT_SAL_SAMPLE_KEY}), locking mode — no agent restart")
                     },
                 ),
                 rtcEventSink = rtcEventSink,
@@ -439,41 +437,6 @@ class AgentChatViewModel : ViewModel() {
                     return@withLock
                 }
                 runStartAgentOnceLocked()
-            }
-        }
-    }
-
-    /**
-     * 声纹预注册 RTM 成功并写入本地 URL 后：若当前已起 Agent，则 stop 再 start，使 `sample_urls` 立即生效（无需用户手动重进）。
-     * 与 [startAgent] 共用 [agentStartMutex]，避免与首次启动并发。
-     */
-    private fun scheduleRestartAgentAfterVoicePrintSal() {
-        viewModelScope.launch {
-            agentStartMutex.withLock {
-                if (_uiState.value.connectionState != ConnectionState.Connected) {
-                    addStatusLog("Voice print SAL: not connected, URL saved for next session")
-                    return@withLock
-                }
-                if (managerOrNull == null) return@withLock
-                val aid = agentSession.agentId
-                if (aid == null) {
-                    addStatusLog("Voice print SAL: URL saved; first agent start will use sample_urls")
-                    return@withLock
-                }
-                val auth = agentSession.authToken
-                addStatusLog("Voice print SAL: stopping agent to apply sample_urls…")
-                ConversationAgentRestCoordinator.stopRemoteAgentIfStarted(aid, auth).fold(
-                    onSuccess = {
-                        agentSession.clearAgentRestFields()
-                        addStatusLog("Voice print SAL: stop OK, restarting agent…")
-                        Log.i(TAG, "Voice print SAL: agent restarted after VP_REGISTER_DOWN")
-                        runStartAgentOnceLocked()
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Voice print SAL: stop agent failed: ${e.message}", e)
-                        addStatusLog("Voice print SAL: stop failed, not restarting: ${e.message}")
-                    },
-                )
             }
         }
     }

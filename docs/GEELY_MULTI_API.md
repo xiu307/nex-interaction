@@ -213,7 +213,7 @@ sequenceDiagram
 
 ### 6.2 会话中声纹注册（RTM `VP_REGISTER_DOWN`，端口修改.md）
 
-注册成功后，服务端经 **USER 点对点**（`clientId=geely_rtm_server`）下发 `VP_REGISTER_DOWN`；App 在 `AgentChatViewModel.onGeelyRtmMessage` 落库并 **restart Agent**。
+注册成功后，服务端经 **USER 点对点**（`clientId=geely_rtm_server`）下发 `VP_REGISTER_DOWN`；App 在 `AgentChatViewModel.onGeelyRtmMessage` 落库即可。**locking 模式**下无需 restart Agent。
 
 删除声纹：注册记录页经 **Message Channel**（当前频道名）发送 `VP_DEL_UP`（`VoicePrintRtmCoordinator`）。
 
@@ -297,7 +297,7 @@ URL 形如：
 检查 `sample_urls` 是否均为 http(s)；查看 `more_sal_config.locking_sessions_from_uids` 是否把各 speaker 映射到正确 rtc uid。
 
 **Q: 预注册后声纹未生效？**  
-看 RTM 是否收到 `VP_REGISTER_DOWN` 且 `rtc_uid` 与本端一致；成功后会 restart Agent。
+看 RTM 是否收到 `VP_REGISTER_DOWN` 且 `rtc_uid` 与本端一致；locking 模式下落库后无需 restart Agent。
 
 **Q: 如何切回官方 Quickstart 公网？**  
 `USE_GEELY_MULTI_API = false`，`USE_PRIVATE_ENV = false`。
