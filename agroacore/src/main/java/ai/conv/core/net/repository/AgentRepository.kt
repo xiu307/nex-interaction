@@ -306,6 +306,8 @@ object AgentRepository {
                         )
                     }
                     if (ConvoConfig.USE_GEELY_MULTI_API) {
+                        //是否是多路声纹
+                        put("cascading_graph", "v1_soseos_multi_user")
                         put("turn_detector", JSONObject().apply {
                             put("disable_interrupt", true)
                         })
