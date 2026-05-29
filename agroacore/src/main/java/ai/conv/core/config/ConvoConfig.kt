@@ -56,9 +56,17 @@ object ConvoConfig {
     val LLM_SYSTEM_MESSAGES: String = """[{"role":"system","content":"You are a helpful assistant."}]"""
     const val LLM_MAX_HISTORY: String = "21"
 
+    // ASR 切换：注释掉当前生效的一组，取消另一组注释即可。
+    // --- openai（吉利 WebSocket，当前生效）---
     const val ASR_LANG: String = "zh-CN"
-    const val ASR_VENDOR: String = "fengming"
-    val ASR_PARAMS: String = ""
+    const val ASR_VENDOR: String = "openai"
+    val ASR_PARAMS: String =
+        """{"base_url": "ws://${GEELY_PRIVATE_IP}:${GEELY_SERVICE_PORT}/realtime?intent=transcription", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "access_key": "", "app_key": "", "resource_id": ""}"""
+
+    // --- fengming（声网内置 ASR，切换时注释上面、取消下面注释）---
+    // const val ASR_LANG: String = "zh-CN"
+    // const val ASR_VENDOR: String = "fengming"
+    // val ASR_PARAMS: String = ""
 
     const val TTS_VENDOR: String = "openai"
     val TTS_PARAMS: String =

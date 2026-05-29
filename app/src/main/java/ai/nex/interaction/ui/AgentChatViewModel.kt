@@ -6,8 +6,8 @@ import androidx.annotation.RequiresPermission
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.nex.interaction.AgentApp
-import ai.nex.interaction.KeyCenter
 import ai.conv.core.ConvoManager
+import ai.conv.core.config.ConvoConfig
 import ai.conv.core.ConvoManagerConfig
 import ai.nex.interaction.video.ConversationExternalVideoPublishController
 import ai.conv.core.convoai.AgentState
@@ -247,7 +247,7 @@ class AgentChatViewModel : ViewModel() {
         try {
             manager = ConvoManager(
                 context = AgentApp.instance(),
-                appId = KeyCenter.APP_ID,
+                appId = ConvoConfig.APP_ID,
                 userId = userId.toString(),
                 config = ConvoManagerConfig(
                     enableConvoAiLog = true,
