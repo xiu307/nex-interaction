@@ -10,13 +10,13 @@
 |------|------------------------|----------------------|
 | join / leave | `http://{GEELY_PRIVATE_IP}:9090/.../projects/{APP_ID}/join`（`USE_PRIVATE_ENV=true`） | `https://api-test.agora.io/hzacsdev01t-ctel/.../join` |
 | Header | 无 Namespace | **`X-Service-Namespace: jili-test`** |
-| LLM / TTS / 拒识 / 注册回调 | 仍多为 `http://47.96.173.253:8080/...`（业务服务，与 join 网关分离） | 同左，按吉利实际部署填写 |
+| LLM / TTS / 拒识 / 注册回调 | `http://47.96.173.253:8081/...`（`ConvoConfig.GEELY_SERVICE_PORT`） | 同左，按吉利实际部署填写 |
 
 端侧 `USE_GEELY_MULTI_API=true` 时，**join URL、Header、body 字段名已按 PDF 配置**；**`APP_ID` / `APP_CERTIFICATE` 与原来一致，不用换**。
 
 若 join 返回 **HTTP 200 且 body 为 `{}`**（App 报解析不到 `agent_id`），更可能原因：
 
-1. **新网关在云端**，join body 里配置的 LLM/TTS/拒识/注册回调仍是 `http://47.96.173.253:8080/...`，公网 Agent 访问不到或校验不通过（需吉利确认 8080 是否已暴露公网或换成新地址）
+1. **新网关在云端**，join body 里业务回调为 `http://47.96.173.253:8081/...`（见 `GEELY_SERVICE_PORT`）
 2. **join body 某字段** 与新后台约定不一致（如 `register`、`more_sal_config`、`stt_uploader` 等）— 需**后台查 join 日志**
 3. 响应 JSON 结构变化（已兼容 `data.agent_id` 等；若仍为空则仍是服务端未创建 Agent）
 
@@ -34,7 +34,7 @@
 | 停止 Agent（leave） | `AgentRepository.stopAgentAsync` | 同上 Header |
 | 动态增删说话人 | `addSalSpeakersAsync` / `deleteSalSpeakersAsync` | 已实现 REST，**UI 未接入**，可按需调用 |
 | 声纹锁定（locking） | join `sal.sample_urls` + `more_sal_config` | 依赖本地注册 OSS URL 或 RTM 预注册 URL |
-| 拒识 | join `parameters.main.interrupt_check` | 实际 HTTP 由吉利 `8080` 服务处理 |
+| 拒识 | join `parameters.main.interrupt_check` | 实际 HTTP 由吉利 `8081` 服务处理 |
 | 声纹预注册回调 | join `parameters.main.register` | HTTP 回调到吉利服务；App 不直接收该 HTTP |
 
 ---
@@ -211,14 +211,11 @@ sequenceDiagram
 
 若 PCM 仍为 `local://` 占位，join 不会把该用户写入 `sample_urls`（日志 TAG `AgentRepository` / `SAL` 会有告警）。
 
-### 6.2 会话中预注册（RTM）
+### 6.2 会话中声纹注册（RTM `VP_REGISTER_DOWN`，端口修改.md）
 
-云端预注册成功后，RTM 类型 `VOICE_PRINT_REGISTER_STATUS` 若携带 `audioUrl`：
+注册成功后，服务端经 **USER 点对点**（`clientId=geely_rtm_server`）下发 `VP_REGISTER_DOWN`；App 在 `AgentChatViewModel.onGeelyRtmMessage` 落库并 **restart Agent**。
 
-- `ConversationalAIAPIImpl` 下载 PCM 到本地；
-- `AgentChatViewModel` 保存 URL 并 **自动 stop + restart Agent**，使 `sample_urls` 生效。
-
-> PDF 新方案通过 HTTP 回调下发 `pcm_base64` 到吉利后端，**不经过 App HTTP**。若仅走 base64 回调，需吉利服务转存 URL 或扩展 App RTM 解析（当前仍按 `audioUrl` 处理）。
+删除声纹：注册记录页经 **Message Channel**（当前频道名）发送 `VP_DEL_UP`（`VoicePrintRtmCoordinator`）。
 
 ---
 
@@ -276,7 +273,7 @@ URL 形如：
 
 ## 9. 后端依赖（需吉利侧配合）
 
-以下能力 **不在 Android 代码内实现**，需在 `GEELY_PRIVATE_IP:8080`（或你们部署的等价服务）按 PDF 提供：
+以下能力 **不在 Android 代码内实现**，需在 `GEELY_PRIVATE_IP:8081`（或等价服务）按 PDF 提供：
 
 | 服务 | 配置项 | PDF 要点 |
 |------|--------|----------|
@@ -300,7 +297,7 @@ URL 形如：
 检查 `sample_urls` 是否均为 http(s)；查看 `more_sal_config.locking_sessions_from_uids` 是否把各 speaker 映射到正确 rtc uid。
 
 **Q: 预注册后声纹未生效？**  
-看 RTM 是否收到 `VOICE_PRINT_REGISTER_STATUS` 且含 `audioUrl`；成功后会触发 Agent 重启。仅 base64 HTTP 回调时需后端落库或转 URL。
+看 RTM 是否收到 `VP_REGISTER_DOWN` 且 `rtc_uid` 与本端一致；成功后会 restart Agent。
 
 **Q: 如何切回官方 Quickstart 公网？**  
 `USE_GEELY_MULTI_API = false`，`USE_PRIVATE_ENV = false`。

@@ -17,6 +17,9 @@ object ConvoConfig {
     /** 吉利业务服务（LLM / TTS / 拒识 / 注册回调），与 join 网关域名不同 */
     const val GEELY_PRIVATE_IP = "47.96.173.253"
 
+    /** 吉利业务 HTTP 端口（端口修改.md：8080 → 8081） */
+    const val GEELY_SERVICE_PORT = 8081
+
     /** 旧内网 Agent 网关（:9090）；新多人方案请保持 false，走 [GEELY_MULTI_BASE_URL] */
     const val USE_PRIVATE_ENV: Boolean = false
 
@@ -46,7 +49,7 @@ object ConvoConfig {
     var IS_GLASS_SCENARIO: Boolean = false
 
     const val LLM_API_KEY: String = "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn"
-    const val LLM_URL: String = "http://${GEELY_PRIVATE_IP}:8080/chat/completions"
+    const val LLM_URL: String = "http://${GEELY_PRIVATE_IP}:${GEELY_SERVICE_PORT}/chat/completions"
     const val LLM_MODEL: String = "qwen-plus"
     const val LLM_VENDOR: String = "custom"
     val LLM_PARRAMS: String = """{"model":"deepseek-chat", "max_token":1024}"""
@@ -59,7 +62,7 @@ object ConvoConfig {
 
     const val TTS_VENDOR: String = "openai"
     val TTS_PARAMS: String =
-        """{"base_url": "http://${GEELY_PRIVATE_IP}:8080/v1", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "model": "gpt-4o-mini-tts", "voice": "coral", "instructions": "", "speed": 1.0}"""
+        """{"base_url": "http://${GEELY_PRIVATE_IP}:${GEELY_SERVICE_PORT}/v1", "api_key": "wugjEjLpoM4ygLCcsg0bmwubtUwEN7yn", "model": "gpt-4o-mini-tts", "voice": "coral", "instructions": "", "speed": 1.0}"""
     const val TTS_BYTEDANCE_APP_ID: String = ""
     const val TTS_BYTEDANCE_TOKEN: String = ""
     @JvmField
@@ -69,8 +72,10 @@ object ConvoConfig {
     var SAL_LAB_PCM_URL_SPEAKER2 =
         "https://voiceprint-labtest.agoralab.co/lab_qn_f1.pcm"
 
-    const val INTERRUPT_CHECK_URL: String = "http://${GEELY_PRIVATE_IP}:8080/v1/audio/interrupt_check"
-    const val PRE_REG_CALLBACK_URL: String = "http://${GEELY_PRIVATE_IP}:8080/v1/voice_print/register_status"
+    const val INTERRUPT_CHECK_URL: String =
+        "http://${GEELY_PRIVATE_IP}:${GEELY_SERVICE_PORT}/v1/audio/interrupt_check"
+    const val PRE_REG_CALLBACK_URL: String =
+        "http://${GEELY_PRIVATE_IP}:${GEELY_SERVICE_PORT}/v1/voice_print/register_status"
 
     const val PRIVATE_BVC_URL: String = "wss://convoai-krildorrjz.cn-hangzhou.fcapp.run/vp/v1/bvcanceling"
     //注意Speaker IDs要与rtc_user_id保持一致

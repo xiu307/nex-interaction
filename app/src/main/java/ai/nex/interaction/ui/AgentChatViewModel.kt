@@ -42,6 +42,8 @@ import ai.conv.core.rtc.leaveConversationChannelEx
 import ai.conv.core.rtm.RtmEventSink
 import ai.conv.core.rtm.RtmLogin
 import ai.nex.interaction.biometric.BiometricSalRegistry
+import ai.nex.interaction.biometric.VoicePrintRtmProtocol
+import ai.nex.interaction.biometric.VoicePrintRtmSession
 import ai.nex.interaction.session.AgentSessionState
 import ai.nex.interaction.session.ConversationAgentRestCoordinator
 import ai.nex.interaction.session.ConversationUserTokenLoader
@@ -241,6 +243,21 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onDebugLog(log: String) {
             Log.d("conversationalAIAPI", log)
+        }
+
+        override fun onGeelyRtmMessage(message: Map<String, Any>) {
+            if (message["type"]?.toString() != VoicePrintRtmProtocol.TYPE_VP_REGISTER_DOWN) return
+            val speakers = VoicePrintRtmProtocol.parseVpRegisterDownSpeakers(message)
+            val added = BiometricSalRegistry.saveVpRegisterDownSpeakers(
+                speakers = speakers,
+                localRtcUids = buildLocalRtcUidSet(),
+            )
+            if (added <= 0) {
+                addStatusLog("VP_REGISTER_DOWN: no speaker for local rtc_uid=${buildLocalRtcUidSet()}")
+                return
+            }
+            addStatusLog("VP_REGISTER_DOWN: saved $added speaker(s), restarting agent…")
+            scheduleRestartAgentAfterVoicePrintSal()
         }
     }
 
@@ -449,7 +466,7 @@ class AgentChatViewModel : ViewModel() {
                     onSuccess = {
                         agentSession.clearAgentRestFields()
                         addStatusLog("Voice print SAL: stop OK, restarting agent…")
-                        Log.i(TAG, "Voice print SAL: agent restarted after VOICE_PRINT_REGISTER_STATUS success")
+                        Log.i(TAG, "Voice print SAL: agent restarted after VP_REGISTER_DOWN")
                         runStartAgentOnceLocked()
                     },
                     onFailure = { e ->
@@ -493,6 +510,7 @@ class AgentChatViewModel : ViewModel() {
                     connectionState = ConnectionState.Connected
                 )
                 addStatusLog("Agent start successfully, agentId=${outcome.agentId}")
+                syncVoicePrintRtmSession()
                 Log.d(TAG, "Agent started successfully, agentId: ${outcome.agentId}")
                 Log.i(TAG, "join 请求体已含 SAL；sample_urls 见 logcat 标签 SAL 或 AgentStarter（需 Debug 包且含最新代码）")
             },
@@ -535,6 +553,7 @@ class AgentChatViewModel : ViewModel() {
     private fun onRtmLoginSucceeded(channelName: String) {
         val m = managerOrNull ?: return
         connection.rtmLoggedIn = true
+        syncVoicePrintRtmSession()
         m.conversationalAIAPI.subscribeMessage(channelName) { errorInfo ->
             if (errorInfo != null) {
                 Log.e(TAG, "Subscribe message error: ${errorInfo}")
@@ -735,6 +754,17 @@ class AgentChatViewModel : ViewModel() {
      */
     private fun rtmReportClientId(): String = userId.toString()
 
+    private fun buildLocalRtcUidSet(): Set<String> =
+        (joinedRemoteRtcUids + listOf(userId.toString())).toSet()
+
+    private fun syncVoicePrintRtmSession() {
+        val m = managerOrNull ?: return
+        VoicePrintRtmSession.rtmClient = m.rtmClient
+        VoicePrintRtmSession.channelName = connection.channelName.takeIf { it.isNotEmpty() }
+        VoicePrintRtmSession.agentId = agentSession.agentId
+        VoicePrintRtmSession.clientId = rtmReportClientId()
+    }
+
     /**
      * 与 Android 对话页一致：已连接且**未**推 RTC 自定义视频时，启动 facedet → RTM `ROBOT_FACE_INFO_UP`。
      * 推自定义视频时会与 CameraX 抢前置相机，须停止上行（在 [setExternalVideoPublishingEnabled] 内处理）。
@@ -800,6 +830,7 @@ class AgentChatViewModel : ViewModel() {
                 connection.markRtcLeft()
                 externalVideoPublish.resetVideoPipelineOnLeaveOrError()
                 agentSession.clearAgentRestFields()
+                VoicePrintRtmSession.clear()
                 resetConversationUiAfterHangup()
                 robotFaceSpeakerBind.clearDedupeState()
                 Log.d(TAG, "Hangup completed")

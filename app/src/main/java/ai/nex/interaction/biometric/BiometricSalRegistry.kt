@@ -22,6 +22,14 @@ data class BiometricStoredPersonRow(
     val pcmOssUrl: String?,
 )
 
+/** `VP_REGISTER_DOWN` 落库（register_uuid / speaker_id / sample_url / rtc_uid）。 */
+data class VpSalSpeakerRecord(
+    val registerUuid: String,
+    val speakerId: String,
+    val rtcUid: String,
+    val sampleUrl: String,
+)
+
 /**
  * 声纹与面部注册页的本地持久化（SharedPreferences，等价原工程 MMKV）。
  */
@@ -42,6 +50,7 @@ object BiometricSalRegistry {
 
     private const val KEY_MAP = "biometric_sal_face_id_pcm_map"
     private const val KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL = "voice_print_register_sal_pcm_url_v1"
+    private const val KEY_VP_SAL_SPEAKERS = "vp_sal_speakers_v1"
     /** 历史人脸 URL 独立 map；已废弃，仅 [clearAllRegistration] 等处移除残留。 */
     private const val LEGACY_FACE_IMAGE_MAP_KEY = "biometric_sal_face_id_face_image_map"
     private const val KEY_REGISTRATION_SNAPSHOT = "biometric_registration_snapshot_v1"
@@ -146,20 +155,61 @@ object BiometricSalRegistry {
     fun getVoicePrintRegisterSalPcmUrl(): String? =
         prefs().getString(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL, null)?.trim()?.takeIf { it.isNotEmpty() && isHttpUrl(it) }
 
+    /** `VP_REGISTER_DOWN`：按 [localRtcUids] 过滤后落库。 */
+    fun saveVpRegisterDownSpeakers(
+        speakers: List<VoicePrintRtmProtocol.VpRegisterDownSpeaker>,
+        localRtcUids: Set<String>,
+    ): Int {
+        if (speakers.isEmpty() || localRtcUids.isEmpty()) return 0
+        val map = loadVpSalSpeakers().toMutableMap()
+        var added = 0
+        for (s in speakers) {
+            if (s.rtcUid !in localRtcUids) continue
+            if (!isHttpUrl(s.sampleUrl)) continue
+            map[s.speakerId] = VpSalSpeakerRecord(
+                registerUuid = s.registerUuid,
+                speakerId = s.speakerId,
+                rtcUid = s.rtcUid,
+                sampleUrl = s.sampleUrl,
+            )
+            saveFaceIdToPcmUrl(s.speakerId, s.sampleUrl)
+            added++
+        }
+        if (added > 0) {
+            prefs().edit().putString(KEY_VP_SAL_SPEAKERS, gson.toJson(map)).commit()
+        }
+        return added
+    }
+
+    fun getVpSalSpeaker(speakerId: String): VpSalSpeakerRecord? = loadVpSalSpeakers()[speakerId]
+
+    fun removeVpSalSpeaker(speakerId: String) {
+        if (speakerId.isEmpty()) return
+        val map = loadVpSalSpeakers().toMutableMap()
+        map.remove(speakerId)
+        prefs().edit().putString(KEY_VP_SAL_SPEAKERS, gson.toJson(map)).commit()
+        removeRegistrationForFaceId(speakerId)
+    }
+
     /**
-     * 生物识别注册的 `faceId -> pcm` 与声纹预注册 URL（固定 key [VOICE_PRINT_SAL_SAMPLE_KEY]）合并结果。
-     * 后者覆盖同名 key，避免与旧数据冲突时语义不清。
+     * join `sample_urls`：优先 `VP_REGISTER_DOWN`；否则回退本地 OSS / 旧预注册 URL。
      */
     fun getRuntimeSalSampleUrlsForAgent(): Map<String, String> {
+        val vp = loadVpSalSpeakers()
+            .mapValues { it.value.sampleUrl }
+            .filter { isHttpUrl(it.value) }
+        if (vp.isNotEmpty()) return vp
         val base = getCompleteSalFaceIdToPcmUrls().toMutableMap()
         getVoicePrintRegisterSalPcmUrl()?.let { base[VOICE_PRINT_SAL_SAMPLE_KEY] = it }
         return base
     }
 
-    /**
-     * 吉利多人 join：`more_sal_config.locking_sessions_from_uids`（speaker_id -> rtc uid）。
-     */
+    /** 吉利多人 join：`more_sal_config.locking_sessions_from_uids`。 */
     fun getLockingSessionsFromUids(fallbackRtcUid: String): Map<String, String> {
+        val vp = loadVpSalSpeakers()
+        if (vp.isNotEmpty()) {
+            return vp.values.associate { it.speakerId to it.rtcUid }
+        }
         val sampleUrls = getRuntimeSalSampleUrlsForAgent()
         if (sampleUrls.isEmpty()) return emptyMap()
         return sampleUrls.keys.associateWith { speakerId ->
@@ -363,6 +413,7 @@ object BiometricSalRegistry {
         val e = prefs().edit()
         e.remove(KEY_MAP)
         e.remove(KEY_VOICE_PRINT_REGISTER_SAL_PCM_URL)
+        e.remove(KEY_VP_SAL_SPEAKERS)
         e.remove(LEGACY_FACE_IMAGE_MAP_KEY)
         e.remove(KEY_REGISTRATION_SNAPSHOT)
         e.remove(KEY_REGISTRATION_SNAPSHOT_MAP)
@@ -409,6 +460,17 @@ object BiometricSalRegistry {
             gson.fromJson(json, BiometricRegistrationSnapshot::class.java)
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun loadVpSalSpeakers(): Map<String, VpSalSpeakerRecord> {
+        val json = prefs().getString(KEY_VP_SAL_SPEAKERS, "") ?: ""
+        if (json.isEmpty()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, VpSalSpeakerRecord>>() {}.type
+            gson.fromJson<Map<String, VpSalSpeakerRecord>>(json, type) ?: emptyMap()
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 

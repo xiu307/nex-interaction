@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import ai.nex.interaction.R
 import ai.nex.interaction.audio.Pcm16kMonoPreviewPlayer
 import ai.nex.interaction.biometric.BiometricSalRegistry
+import ai.nex.interaction.biometric.VoicePrintRtmCoordinator
 import ai.nex.interaction.databinding.ActivityBiometricRegisteredRecordsBinding
 import ai.nex.interaction.ui.common.BaseActivity
 import com.google.android.material.button.MaterialButton
@@ -137,11 +138,30 @@ class BiometricRegisteredRecordsActivity : BaseActivity<ActivityBiometricRegiste
             .setMessage(R.string.biometric_record_delete_message)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.biometric_record_delete) { _, _ ->
-                BiometricSalRegistry.removeRegistrationForFaceId(faceId)
-                pcmPlayer.stop()
-                playingButton = null
-                refreshList()
-                Toast.makeText(this, R.string.biometric_record_delete_ok, Toast.LENGTH_SHORT).show()
+                if (BiometricSalRegistry.getVpSalSpeaker(faceId) != null) {
+                    VoicePrintRtmCoordinator.trySendVpDelUp(faceId) { ok, msg ->
+                        runOnUiThread {
+                            if (!ok) {
+                                Toast.makeText(
+                                    this,
+                                    "VP_DEL_UP: ${msg ?: "failed"}，仍删除本地",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                            BiometricSalRegistry.removeVpSalSpeaker(faceId)
+                            pcmPlayer.stop()
+                            playingButton = null
+                            refreshList()
+                            Toast.makeText(this, R.string.biometric_record_delete_ok, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    BiometricSalRegistry.removeRegistrationForFaceId(faceId)
+                    pcmPlayer.stop()
+                    playingButton = null
+                    refreshList()
+                    Toast.makeText(this, R.string.biometric_record_delete_ok, Toast.LENGTH_SHORT).show()
+                }
             }
             .show()
     }
