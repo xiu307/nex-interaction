@@ -604,11 +604,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             return
         }
         hasShownBiometricSoftHint = true
-        Toast.makeText(
-            this,
-            getString(R.string.biometric_save_only_oss_hint),
-            Toast.LENGTH_LONG,
-        ).show()
+        // 联调阶段先关闭人脸/声纹 OSS 提示 Toast
+        // Toast.makeText(
+        //     this,
+        //     getString(R.string.biometric_save_only_oss_hint),
+        //     Toast.LENGTH_LONG,
+        // ).show()
     }
 
     private fun maybePromptReRegister() {
