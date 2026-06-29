@@ -249,7 +249,7 @@ object AgentRepository {
         lockingSessionsFromUids: Map<String, String>,
     ): JSONObject {
         val labelUserIdStr = labelUserId.toString()
-        val useLockingSal = true //runtimeSalSampleUrls.isNotEmpty()
+        val useLockingSal = runtimeSalSampleUrls.isNotEmpty()
         val primaryRtcUid = lockingSessionsFromUids.values.firstOrNull()
             ?: remoteRtcUids.firstOrNull()
             ?: labelUserIdStr
@@ -276,7 +276,7 @@ object AgentRepository {
                 put("tts", buildTtsJson())
                 put("sal", JSONObject().apply {
                     if (!useLockingSal) {
-                        put("sal_mode", "pre_register")
+                        put("sal_mode", "register")
                     } else {
                         put("sal_mode", "locking")
                         put(
@@ -308,10 +308,11 @@ object AgentRepository {
                     if (ConvoConfig.USE_GEELY_MULTI_API) {
                         //是否是多路声纹
                         put("cascading_graph", "v1_soseos_multi_user")
-                        put("turn_detector", JSONObject().apply {
-                            put("disable_interrupt", true)
-                        })
                     }
+                    put("interruption", JSONObject().apply {
+                        put("enable", true)
+                        put("mode", "custom")
+                    })
                     put("audio3a_downstream", JSONObject().apply {
                         put("enable_ans", false)
                         put("passthrough", true)
@@ -330,20 +331,20 @@ object AgentRepository {
                             })
                         })
                     })
-                    put("stt_uploader", JSONObject().apply {
-                        put("config", JSONObject().apply {
-                            put("enable", true)
-                            put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
-                            put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
-                            put("region", 0)
-                            put("vendor", 2)
-                            put("bucket", "ndt-public")
-                            put("fileNamePrefix", JSONArray().apply {
-                                put("shengwen")
-                                put("register")
-                            })
-                        })
-                    })
+//                    put("stt_uploader", JSONObject().apply {
+//                        put("config", JSONObject().apply {
+//                            put("enable", true)
+//                            put("accessKey", ConvoConfig.STT_UPLOADER_KEY)
+//                            put("secretKey", ConvoConfig.STT_UPLOADER_SECRET)
+//                            put("region", 0)
+//                            put("vendor", 2)
+//                            put("bucket", "ndt-public")
+//                            put("fileNamePrefix", JSONArray().apply {
+//                                put("shengwen")
+//                                put("register")
+//                            })
+//                        })
+//                    })
                     if (ConvoConfig.USE_PRIVATE_ENV) {
                         put("rtc", JSONObject().apply {
                             put("domain_list", JSONArray().apply {
@@ -368,39 +369,26 @@ object AgentRepository {
         put("interrupt_check", JSONObject().apply {
             put("enabled", true)
             put("url", ConvoConfig.INTERRUPT_CHECK_URL)
-            put("api_key", ConvoConfig.LLM_API_KEY)
-            if (ConvoConfig.USE_GEELY_MULTI_API) {
-                put("timeout_ms", ConvoConfig.INTERRUPT_CHECK_TIMEOUT_MS)
-            } else {
-                put("timeout_seconds", 5)
-            }
+            put("headers", JSONObject().apply {
+                put("Authorization", ConvoConfig.LLM_API_KEY)})
+            put("timeout_ms", ConvoConfig.INTERRUPT_CHECK_TIMEOUT_MS)
             put("labels", JSONObject().put("userName", labelUserIdStr).apply {
                 if (ConvoConfig.IS_GLASS_SCENARIO) {
                     put("channelCode", "1_jowneyTestDevice")
                 }
             })
         })
-        if (ConvoConfig.USE_GEELY_MULTI_API) {
-            put("register", JSONObject().apply {
-                put("enable", true)
-                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                put("api_key", ConvoConfig.LLM_API_KEY)
-                put("callback_timeout_seconds", 5.0)
-                put("upload_result_timeout_seconds", 10.0)
-                put("callback_max_retries", 5)
-                put("gate_timeout_seconds", ConvoConfig.REGISTER_GATE_TIMEOUT_SECONDS)
-                put("temp_dir", "/tmp/convoai_register")
-            })
-        } else {
-            put("pre_register", JSONObject().apply {
-                put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
-                put("api_key", ConvoConfig.LLM_API_KEY)
-                put("callback_timeout_seconds", 5.0)
-                put("upload_result_timeout_seconds", 10.0)
-                put("callback_max_retries", 5)
-                put("temp_dir", "/tmp/convoai_pre_register")
-            })
-        }
+        put("register", JSONObject().apply {
+            put("enable", true)
+            put("callback_url", ConvoConfig.PRE_REG_CALLBACK_URL)
+            put("headers", JSONObject().apply {
+                put("Authorization", ConvoConfig.LLM_API_KEY)})
+            put("callback_timeout_seconds", 5.0)
+            put("upload_result_timeout_seconds", 10.0)
+            put("callback_max_retries", 5)
+            put("gate_timeout_seconds", ConvoConfig.REGISTER_GATE_TIMEOUT_SECONDS)
+            put("temp_dir", "/tmp/convoai_register")
+        })
     }
 
     private fun buildMoreSalConfigJson(
